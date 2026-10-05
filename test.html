@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Dreamie tests</title>
+    <link rel="stylesheet" href="./styles.css" />
     <style>
       body { background: #111228; color: #f6f3ff; font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 24px; }
       .pass { color: #a9efcb; }
@@ -62,6 +63,42 @@
 
         run('exports a mount function for the browser conversation shell', () => {
           assert(typeof mountChat === 'function', 'mountChat is not a function');
+        });
+
+        run('does not send while an IME composition is being confirmed', () => {
+          const fixture = document.createElement('div');
+          fixture.innerHTML = `
+            <textarea data-composer></textarea><button data-send></button>
+            <ul data-messages></ul><p data-status></p>
+          `;
+          document.body.append(fixture);
+          mountChat(fixture);
+          const composer = fixture.querySelector('[data-composer]');
+          composer.value = '你好';
+          composer.dispatchEvent(new Event('input', { bubbles: true }));
+          const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+          Object.defineProperty(event, 'isComposing', { value: true });
+          composer.dispatchEvent(event);
+          assert(fixture.querySelectorAll('[data-messages] li').length === 0, 'IME confirmation sent a message');
+          fixture.remove();
+        });
+
+        run('keeps a visible focus indicator on the composer', () => {
+          const fixture = document.createElement('div');
+          fixture.innerHTML = '<div class="composer"><textarea></textarea></div>';
+          document.body.append(fixture);
+          const composer = fixture.querySelector('textarea');
+          composer.focus();
+          assert(getComputedStyle(composer).outlineStyle !== 'none', 'composer has no visible focus outline');
+          fixture.remove();
+        });
+
+        run('anchors the composer independently of conversation height', () => {
+          const fixture = document.createElement('div');
+          fixture.innerHTML = '<form class="composer"></form>';
+          document.body.append(fixture);
+          assert(getComputedStyle(fixture.querySelector('.composer')).position === 'fixed', 'composer is still in normal document flow');
+          fixture.remove();
         });
       } catch (error) {
         cases.push({ name: 'load chat state module', passed: false, error: error.message });
