@@ -48,7 +48,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .circle-button { width: 35px; height: 35px; border-radius: 50%; color: #ede8ff; background: rgba(248, 246, 255, .11); border: 1px solid rgba(255, 255, 255, .12); }
 .circle-button svg { width: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
-.scene { height: clamp(290px, 43svh, 387px); position: relative; margin: 5px -18px 0; }
+.scene { height: clamp(310px, 46svh, 410px); position: relative; margin: 5px -18px 0; }
 .moon { position: absolute; top: 20px; right: 32px; width: 48px; height: 48px; border-radius: 50%; background: #e8e0ff; opacity: .95; box-shadow: 0 0 26px 9px rgba(221, 205, 255, .42); }
 .moon::after { content: ""; position: absolute; left: -7px; top: -3px; width: 47px; height: 47px; border-radius: 50%; background: #1c2151; }
 .stars i { position: absolute; display: block; width: 3px; height: 3px; border-radius: 50%; background: #f0eaff; box-shadow: 0 0 9px 2px #d6c4ff; animation: twinkle 3s ease-in-out infinite; }
@@ -64,5 +64,5 @@ button { -webkit-tap-highlight-color: transparent; }
 :focus-visible { outline: 2px solid #e1d6ff; outline-offset: 3px; }.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @keyframes twinkle { 50% { opacity: .35; transform: scale(.65); } } @keyframes float { 50% { transform: translateX(-50%) translateY(-5px); } }
 @media (min-width: 600px) { body { display: grid; place-items: center; min-height: 100vh; background: radial-gradient(circle at center, #25285a, #080919 70%); }.app-shell { width: min(430px, 100vw); min-height: min(852px, 100svh); border-radius: 32px; box-shadow: 0 26px 70px rgba(0, 0, 0, .44); } }
-@media (max-height: 700px) { .scene { height: 277px; }.conversation h1 { font-size: 1.42rem; }.quick-prompts button { padding: 5px 8px; } }
+@media (max-height: 700px) { .scene { height: 300px; }.conversation h1 { font-size: 1.42rem; }.quick-prompts button { padding: 5px 8px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
