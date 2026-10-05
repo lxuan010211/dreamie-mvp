@@ -35,7 +35,7 @@
       };
 
       try {
-        const { createChatState } = await import('./app.js');
+        const { createChatState, mountChat } = await import('./app.js');
 
         run('whitespace-only drafts do not send', () => {
           const chat = createChatState();
@@ -58,6 +58,10 @@
           const snapshot = chat.getSnapshot();
           assert(snapshot.messages[0]?.text === '想慢一点聊\n今晚的心情', 'sent text changed unexpectedly');
           assert(snapshot.draft === '', 'draft was not cleared');
+        });
+
+        run('exports a mount function for the browser conversation shell', () => {
+          assert(typeof mountChat === 'function', 'mountChat is not a function');
         });
       } catch (error) {
         cases.push({ name: 'load chat state module', passed: false, error: error.message });

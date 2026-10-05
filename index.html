@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#17183b" />
+    <title>Dreamie · 陪你慢慢聊</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell" data-chat-app aria-label="Dreamie 对话入口">
+      <div class="app-glow" aria-hidden="true"></div>
+
+      <header class="topbar">
+        <a class="brand" href="#main-content" aria-label="Dreamie 首页">
+          <span class="brand-mark" aria-hidden="true">✦</span>
+          <span>Dreamie</span>
+        </a>
+        <div class="presence" aria-label="Dreamie 在线陪伴中">
+          <span class="presence-dot" aria-hidden="true"></span>
+          陪你慢慢聊
+        </div>
+        <button class="circle-button" type="button" aria-label="设置，功能即将推出" title="设置，功能即将推出">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.8A3.2 3.2 0 1 0 12 15.2 3.2 3.2 0 0 0 12 8.8Zm8.2 4.45-1.69.98c.04.28.06.57.06.86s-.02.58-.06.86l1.69.98-1.7 2.94-1.7-.98a6.7 6.7 0 0 1-1.49.86v1.96H11.9V18.8a6.7 6.7 0 0 1-1.49-.86l-1.7.98-1.7-2.94 1.69-.98A6.2 6.2 0 0 1 8.64 14c0-.29.02-.58.06-.86l-1.69-.98 1.7-2.94 1.7.98c.46-.35.96-.64 1.49-.86V7.38h3.4v1.96c.53.22 1.03.51 1.49.86l1.7-.98 1.7 2.94Z" /></svg>
+        </button>
+      </header>
+
+      <section class="scene" aria-label="Dreamie 的月光客厅">
+        <div class="moon" aria-hidden="true"></div>
+        <div class="stars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="halo halo--one" aria-hidden="true"></div>
+        <div class="halo halo--two" aria-hidden="true"></div>
+
+        <div class="sofa" aria-hidden="true">
+          <div class="sofa-back"></div>
+          <div class="sofa-arm sofa-arm--left"></div>
+          <div class="sofa-arm sofa-arm--right"></div>
+          <div class="sofa-seat"></div>
+          <div class="sofa-shadow"></div>
+        </div>
+        <div class="lamb-wrap">
+          <img src="./assets/mascots/dreamie-lamb-lavender-pillow-awake-v11.png" alt="Dreamie 小羊抱着薰衣草色抱枕坐在沙发上" />
+        </div>
+      </section>
+
+      <section class="conversation" id="main-content" aria-label="与 Dreamie 聊天">
+        <p class="eyebrow">现在，想说点什么？</p>
+        <h1>今晚的心情，<br />可以慢慢说给我听。</h1>
+        <p class="status" data-status role="status" aria-live="polite">Dreamie 正在静静等你开口</p>
+
+        <ul class="messages" data-messages aria-live="polite" aria-label="已发送的消息"></ul>
+
+        <div class="quick-prompts" aria-label="快捷开场话题">
+          <button type="button" data-prompt="陪我聊聊今天的心情">今天有点累</button>
+          <button type="button" data-prompt="给我讲一个温柔的小故事">讲个小故事</button>
+          <button type="button" data-prompt="帮我整理一下脑海里的想法">理一理思绪</button>
+        </div>
+      </section>
+
+      <form class="composer" onsubmit="return false" aria-label="发送消息给 Dreamie">
+        <button class="composer-icon" type="button" aria-label="语音输入，功能即将推出" title="语音输入，功能即将推出">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14.5a3.25 3.25 0 0 0 3.25-3.25V6.5a3.25 3.25 0 1 0-6.5 0v4.75A3.25 3.25 0 0 0 12 14.5Zm5.25-4v.75a5.25 5.25 0 0 1-10.5 0v-.75M12 16.5v3m-3 0h6" /></svg>
+        </button>
+        <label class="sr-only" for="message">想和 Dreamie 说什么</label>
+        <textarea id="message" rows="1" data-composer placeholder="和 Dreamie 说说话…" aria-label="想和 Dreamie 说什么"></textarea>
+        <button class="send-button" type="button" data-send disabled aria-label="发送消息">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20.5 3.5-17 7.25 7.1 2.15 2.15 7.1 7.75-16.5ZM10.6 12.9l3.55-3.55" /></svg>
+        </button>
+      </form>
+      <p class="composer-hint">按 Enter 发送 · Shift + Enter 换行</p>
+    </main>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
