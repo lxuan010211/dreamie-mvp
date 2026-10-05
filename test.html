@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dreamie tests</title>
+    <style>
+      body { background: #111228; color: #f6f3ff; font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 24px; }
+      .pass { color: #a9efcb; }
+      .fail { color: #ffb6c7; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Dreamie browser tests</h1>
+      <p id="result">Running…</p>
+      <ul id="tests"></ul>
+    </main>
+    <script type="module">
+      const output = document.querySelector('#tests');
+      const result = document.querySelector('#result');
+      const cases = [];
+
+      const assert = (condition, message) => {
+        if (!condition) throw new Error(message);
+      };
+
+      const run = (name, fn) => {
+        try {
+          fn();
+          cases.push({ name, passed: true });
+        } catch (error) {
+          cases.push({ name, passed: false, error: error.message });
+        }
+      };
+
+      try {
+        const { createChatState } = await import('./app.js');
+
+        run('whitespace-only drafts do not send', () => {
+          const chat = createChatState();
+          chat.setDraft('   ');
+          assert(chat.send() === false, 'whitespace draft was sent');
+          assert(chat.getSnapshot().messages.length === 0, 'an empty message was stored');
+        });
+
+        run('quick prompt fills without sending', () => {
+          const chat = createChatState();
+          chat.choosePrompt('陪我聊聊今天的心情');
+          assert(chat.getSnapshot().draft === '陪我聊聊今天的心情', 'prompt was not copied into draft');
+          assert(chat.getSnapshot().messages.length === 0, 'prompt sent itself');
+        });
+
+        run('multiline draft is trimmed, sent, and cleared', () => {
+          const chat = createChatState();
+          chat.setDraft('  想慢一点聊\n今晚的心情  ');
+          assert(chat.send() === true, 'valid draft did not send');
+          const snapshot = chat.getSnapshot();
+          assert(snapshot.messages[0]?.text === '想慢一点聊\n今晚的心情', 'sent text changed unexpectedly');
+          assert(snapshot.draft === '', 'draft was not cleared');
+        });
+      } catch (error) {
+        cases.push({ name: 'load chat state module', passed: false, error: error.message });
+      }
+
+      for (const item of cases) {
+        const row = document.createElement('li');
+        row.className = item.passed ? 'pass' : 'fail';
+        row.textContent = item.passed ? `PASS — ${item.name}` : `FAIL — ${item.name}: ${item.error}`;
+        output.append(row);
+      }
+
+      const failures = cases.filter((item) => !item.passed).length;
+      result.textContent = failures ? `${failures} test(s) failed` : `${cases.length} test(s) passed`;
+      result.dataset.status = failures ? 'failed' : 'passed';
+    </script>
+  </body>
+</html>
