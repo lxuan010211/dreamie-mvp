@@ -18,7 +18,7 @@ dotenv.config({ path: '.env.local', quiet: true });
 
 const root = resolve(process.cwd(), '..');
 const localHttpsDirectory = resolve(process.cwd(), '.local-https');
-const staticFiles = new Map([['/', 'index.html'], ['/index.html', 'index.html'], ['/app.js', 'app.js'], ['/styles.css', 'styles.css']]);
+const staticFiles = new Map([['/', 'index.html'], ['/index.html', 'index.html'], ['/app.js', 'app.js'], ['/audio-player.js', 'audio-player.js'], ['/styles.css', 'styles.css']]);
 
 export type WebAudioResponse = WebChatResponse & {
   tts?: { dataUrl: string };
@@ -48,6 +48,15 @@ export function buildWebAudioResponse(
   };
 }
 
+export function getStaticFile(pathname: string): string | undefined {
+  return staticFiles.get(pathname) ?? (pathname.startsWith('/assets/mascots/') ? pathname.slice(1) : undefined);
+}
+
+export function getSpeechText(result: Pick<WebChatResponse, 'reply' | 'audioScript'>): string {
+  const script = result.audioScript?.trim();
+  return script ? `${result.reply}\n${script}` : result.reply;
+}
+
 export function createDreamieWebServer() {
   const config = loadConfig(process.env);
   const ttsConfig = loadMiniMaxTtsConfig(process.env);
@@ -72,7 +81,8 @@ export function createDreamieWebServer() {
         if (!isUuid(input.userId)) return json(response, 400, { error: '浏览器身份无效，请刷新页面后重试。' });
         const result = await sessions.handleMessage({ userId: input.userId, sessionId: input.sessionId, message: input.message });
         try {
-          const dataUrl = await synthesizeMiniMaxSpeech(result.reply, ttsConfig);
+          if (result.audioMode === 'background') return json(response, 200, buildWebAudioResponse(result));
+          const dataUrl = await synthesizeMiniMaxSpeech(getSpeechText(result), ttsConfig);
           return json(response, 200, buildWebAudioResponse(result, dataUrl));
         } catch {
           return json(response, 200, buildWebAudioResponse(result, undefined, '语音暂时不可用，但文字回复仍然有效。'));
@@ -96,7 +106,7 @@ export function createDreamieWebServer() {
         response.end(readFileSync(caPath));
         return;
       }
-      const file = staticFiles.get(url.pathname) ?? (url.pathname.startsWith('/assets/mascots/') ? url.pathname.slice(1) : undefined);
+      const file = getStaticFile(url.pathname);
       if (!file || file.includes('..')) return json(response, 404, { error: '未找到页面资源。' });
       const path = resolve(root, file); if (!path.startsWith(root) || !existsSync(path)) return json(response, 404, { error: '未找到页面资源。' });
       const type = basename(path).endsWith('.js') ? 'text/javascript; charset=utf-8' : basename(path).endsWith('.css') ? 'text/css; charset=utf-8' : path.endsWith('.png') ? 'image/png' : 'text/html; charset=utf-8';

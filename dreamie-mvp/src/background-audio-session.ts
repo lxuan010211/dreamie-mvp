@@ -51,7 +51,14 @@ export function shouldSoftRecommendBackgroundAudio(
 }
 
 export function requestsBackgroundAudio(input: string): boolean {
-  return /(雨声|白噪音|海浪|海风|壁炉|背景音|背景音乐)/.test(input);
+  const normalized = input.replace(/\s/g, '');
+  if (/(不要|别|不想|不用|无需|不需要|停止|关闭).{0,4}(雨声|白噪音|海浪|海风|壁炉|背景音|背景音乐)/.test(normalized)) return false;
+  return /(雨声|白噪音|海浪|海风|壁炉|背景音|背景音乐)/.test(normalized)
+    && /(请|想|要|放|播放|听|来点|配|伴着|陪我)/.test(normalized);
+}
+
+export function requestsNarrationWithBackground(input: string): boolean {
+  return /(故事|冥想|引导|讲|读|播客|文章|内容)/.test(input);
 }
 
 export function getConversationPrompt(session: BackgroundAudioSession): string {

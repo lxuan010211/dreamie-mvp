@@ -9,6 +9,7 @@ import {
   getConversationPrompt,
   markRecommendationDeclined,
   recommendBackgroundAudio,
+  requestsBackgroundAudio,
   shouldSoftRecommendBackgroundAudio,
 } from '../src/background-audio-session.js';
 
@@ -49,6 +50,11 @@ test('prefers rain when it matches the user memory and current mood', () => {
 test('recognizes explicit like and dislike feedback', () => {
   assert.equal(getBackgroundAudioAction('喜欢'), 'like');
   assert.equal(getBackgroundAudioAction('不要再推荐'), 'dislike');
+});
+
+test('recognizes affirmative ambience requests but ignores negative mentions', () => {
+  assert.equal(requestsBackgroundAudio('请放一点雨声陪我'), true);
+  assert.equal(requestsBackgroundAudio('不要背景音，只陪我聊聊天'), false);
 });
 
 test('softly recommends only when the mood and memory preference match', () => {

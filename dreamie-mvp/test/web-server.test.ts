@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { buildWebAudioResponse, getListenPort, getLocalCertificateUrl, getLocalPreviewUrls, createDreamieWebServer } from '../src/web-server.js';
+import { buildWebAudioResponse, getListenPort, getLocalCertificateUrl, getLocalPreviewUrls, getSpeechText, getStaticFile, createDreamieWebServer } from '../src/web-server.js';
+
+test('serves the browser audio controller module and prefers the generated script for TTS', () => {
+  assert.equal(getStaticFile('/audio-player.js'), 'audio-player.js');
+  assert.equal(getSpeechText({ reply: '简短回复', audioScript: '完整睡前故事。' }), '简短回复\n完整睡前故事。');
+  assert.equal(getSpeechText({ reply: '简短回复' }), '简短回复');
+});
 
 test('lists both HTTP and local HTTPS preview addresses', () => {
   assert.deepEqual(getLocalPreviewUrls('10.194.246.209'), {

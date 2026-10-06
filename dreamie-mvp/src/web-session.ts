@@ -11,6 +11,7 @@ import {
   markRecommendationDeclined,
   recommendBackgroundAudio,
   requestsBackgroundAudio,
+  requestsNarrationWithBackground,
   shouldSoftRecommendBackgroundAudio,
 } from './background-audio-session.js';
 import type { SleepPlan } from './dreamie.js';
@@ -25,6 +26,7 @@ import {
 export interface WebChatResponse {
   sessionId: string;
   reply: string;
+  audioScript?: string;
   audioMode: SleepPlan['audioMode'];
   backgroundTrackId?: string;
   recommendation?: string;
@@ -106,11 +108,12 @@ export function createWebSessionService(dependencies: {
     session: WebSession,
     reply: string,
     state: 'pending' | 'playing',
-    audioPlan?: Pick<SleepPlan, 'audioMode' | 'backgroundTrackId' | 'recommendation' | 'autoplay'>,
+    audioPlan?: Partial<Pick<SleepPlan, 'audioScript' | 'audioMode' | 'backgroundTrackId' | 'recommendation' | 'autoplay'>>,
   ): WebChatResponse {
     return {
       sessionId: session.id,
       reply,
+      audioScript: audioPlan?.audioScript,
       audioMode: audioPlan?.audioMode ?? 'voice',
       backgroundTrackId: audioPlan?.backgroundTrackId,
       recommendation: audioPlan?.recommendation,
@@ -201,9 +204,9 @@ export function createWebSessionService(dependencies: {
         session.track = undefined;
       }
       const responsePlan = shouldSuggest
-        ? { ...plan, audioMode: 'background' as const, backgroundTrackId: session.track?.id, recommendation: plan.recommendation ?? getBackgroundRecommendationText(session.track!), autoplay: false }
+        ? { ...plan, audioMode: 'voice' as const, backgroundTrackId: session.track?.id, recommendation: plan.recommendation ?? getBackgroundRecommendationText(session.track!), autoplay: false }
         : shouldAttachAudio
-          ? { ...plan, audioMode: 'voice_with_background' as const, backgroundTrackId: session.track?.id }
+          ? { ...plan, audioMode: requestsNarrationWithBackground(input.message) ? 'voice_with_background' as const : 'background' as const, backgroundTrackId: session.track?.id, autoplay: requestsNarrationWithBackground(input.message) ? plan.autoplay : false }
           : { ...plan, audioMode: 'voice' as const, backgroundTrackId: undefined, recommendation: undefined };
       const responseText = shouldSuggest || shouldAttachAudio
         ? `${plan.reply}\n${getBackgroundRecommendationText(session.track!)}`

@@ -137,7 +137,7 @@ export function mountChat(root = document) {
   const prepareSpeech = (data) => {
     stopSpeech();
     if (data.tts?.dataUrl) audioPlayer.loadVoice(data.tts.dataUrl, { mode: data.audioMode });
-    if (data.background?.url) audioPlayer.loadBackground(data.background.url);
+    if (data.background?.url) audioPlayer.loadBackground(data.background.url, { preserveVoice: Boolean(data.tts?.dataUrl), mode: data.audioMode });
     speechAvailable = Boolean(data.tts?.dataUrl || data.background?.url);
     if (speechAvailable && data.autoplay !== false) void playSpeech();
     else render();

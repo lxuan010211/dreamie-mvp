@@ -1,6 +1,11 @@
 import { Agent } from '@openai/agents';
 import { z } from 'zod';
 
+const optionalText = () => z.preprocess(
+  (value) => typeof value === 'string' && value.trim() === '' ? undefined : value == null ? undefined : value,
+  z.string().trim().min(1).optional(),
+);
+
 export const sleepPlanSchema = z.object({
   reply: z.string().trim().min(1).max(300),
   contentType: z.enum(['breathing', 'white_noise', 'sleep_story', 'meditation']),
@@ -8,8 +13,11 @@ export const sleepPlanSchema = z.object({
   mood: z.enum(['overthinking', 'tired', 'stressed', 'restless', 'calm', 'sad', 'unknown']),
   audioScript: z.string().trim().min(30).max(1200),
   audioMode: z.enum(['voice', 'background', 'voice_with_background']).default('voice'),
-  backgroundTrackId: z.string().trim().min(1).optional(),
-  recommendation: z.string().trim().min(1).max(160).optional(),
+  backgroundTrackId: optionalText(),
+  recommendation: z.preprocess(
+    (value) => typeof value === 'string' && value.trim() === '' ? undefined : value == null ? undefined : value,
+    z.string().trim().min(1).max(160).optional(),
+  ),
   autoplay: z.boolean().default(true),
 });
 

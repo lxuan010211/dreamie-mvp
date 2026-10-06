@@ -14,6 +14,9 @@ export function createAudioPlaybackController({
   let context;
   let voiceGain;
   let backgroundGain;
+  let voiceSource;
+  let backgroundSource;
+  let operation = 0;
 
   const setState = (nextState) => {
     state = nextState;
@@ -31,10 +34,30 @@ export function createAudioPlaybackController({
   };
 
   const stop = () => {
+    operation += 1;
     stopElement(voice);
     stopElement(background);
     if (context?.state === 'running') void context.suspend?.();
     setState('idle');
+  };
+
+  const resetGraph = () => {
+    voiceSource?.disconnect?.();
+    backgroundSource?.disconnect?.();
+    voiceGain?.disconnect?.();
+    backgroundGain?.disconnect?.();
+    voiceSource = undefined;
+    backgroundSource = undefined;
+    voiceGain = undefined;
+    backgroundGain = undefined;
+  };
+
+  const reset = () => {
+    stop();
+    resetGraph();
+    voice = undefined;
+    background = undefined;
+    mode = 'voice';
   };
 
   const ensureMixGraph = () => {
@@ -43,18 +66,20 @@ export function createAudioPlaybackController({
     if (!voiceGain) {
       voiceGain = context.createGain();
       voiceGain.gain.value = 1;
-      context.createMediaElementSource(voice).connect(voiceGain).connect(context.destination);
+      voiceSource = context.createMediaElementSource(voice);
+      voiceSource.connect(voiceGain).connect(context.destination);
     }
     if (!backgroundGain) {
       backgroundGain = context.createGain();
       backgroundGain.gain.value = 0.18;
-      context.createMediaElementSource(background).connect(backgroundGain).connect(context.destination);
+      backgroundSource = context.createMediaElementSource(background);
+      backgroundSource.connect(backgroundGain).connect(context.destination);
     }
     return true;
   };
 
   const loadVoice = (src, options = {}) => {
-    stop();
+    reset();
     voice = new AudioCtor(src);
     voice.preload = 'auto';
     mode = options.mode ?? 'voice';
@@ -62,28 +87,36 @@ export function createAudioPlaybackController({
     setState('ready');
   };
 
-  const loadBackground = (src) => {
+  const loadBackground = (src, options = {}) => {
+    if (!options.preserveVoice) reset();
+    else stopElement(background);
     background = new AudioCtor(src);
     background.preload = 'auto';
     background.loop = true;
     background.volume = 0.18;
-    if (voice) mode = 'voice_with_background';
+    if (options.preserveVoice && voice) mode = options.mode ?? 'voice_with_background';
     else mode = 'background';
     setState('ready');
   };
 
   const play = async () => {
     if (!voice && !background) return;
+    const currentOperation = operation;
     if (mode === 'voice_with_background' && ensureMixGraph()) {
       await context.resume?.();
     }
     setState('playing');
     try {
       const playPromises = [];
-      if (voice) playPromises.push(voice.play());
+      if (voice && mode !== 'background') playPromises.push(voice.play());
       if (background && (mode === 'background' || mode === 'voice_with_background')) playPromises.push(background.play());
       await Promise.all(playPromises);
+      if (currentOperation !== operation) return;
     } catch (error) {
+      if (currentOperation !== operation) return;
+      stopElement(voice);
+      stopElement(background);
+      if (context?.state === 'running') void context.suspend?.();
       setState('ready');
       throw error;
     }
@@ -92,6 +125,7 @@ export function createAudioPlaybackController({
   return {
     loadVoice,
     loadBackground,
+    reset,
     play,
     stop,
     getState: () => state,

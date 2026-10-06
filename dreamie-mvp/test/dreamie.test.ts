@@ -63,3 +63,18 @@ test('parses a model response into a sleep plan', () => {
   assert.equal(plan.mood, 'overthinking');
   assert.equal(plan.audioScript, '现在不用急着入睡。跟着我慢慢呼吸，吸气时感受空气进入身体，呼气时让肩膀轻轻放松下来。');
 });
+
+test('normalizes nullable optional audio fields from model JSON', () => {
+  const plan = parseSleepPlan(
+    '{"reply":"先慢慢放松。","contentType":"breathing","durationMinutes":10,"mood":"tired","audioScript":"现在不用急着入睡，让呼吸慢下来，肩膀也跟着放松，身体会一点点安静下来。","backgroundTrackId":null,"recommendation":null}',
+  );
+
+  assert.equal(plan.backgroundTrackId, undefined);
+  assert.equal(plan.recommendation, undefined);
+
+  const empty = parseSleepPlan(
+    '{"reply":"先慢慢放松。","contentType":"breathing","durationMinutes":10,"mood":"tired","audioScript":"现在不用急着入睡，让呼吸慢下来，肩膀也跟着放松，身体会一点点安静下来。","backgroundTrackId":"","recommendation":""}',
+  );
+  assert.equal(empty.backgroundTrackId, undefined);
+  assert.equal(empty.recommendation, undefined);
+});

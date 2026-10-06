@@ -48,6 +48,28 @@ test('records play only after clear consent', async (t) => {
   assert.deepEqual(service.getEventTypes(first.sessionId, firstUserId), ['recommended', 'played']);
 });
 
+test('preserves the generated sleep script for the web TTS layer', async (t) => {
+  const response = await createService(t).handleMessage({ userId: firstUserId, message: '讲一段放松引导' });
+  assert.equal(response.audioScript, voicePlan.audioScript);
+});
+
+test('keeps a background-only request as background mode', async (t) => {
+  const response = await createService(t, backgroundPlan).handleMessage({ userId: firstUserId, message: '请播放雨声' });
+  assert.equal(response.audioMode, 'background');
+});
+
+test('keeps narration plus ambience as a mixed response', async (t) => {
+  const response = await createService(t, backgroundPlan).handleMessage({ userId: firstUserId, message: '讲一个温柔的小故事，配一点雨声' });
+  assert.equal(response.audioMode, 'voice_with_background');
+  assert.equal(response.audioScript, voicePlan.audioScript);
+});
+
+test('does not attach ambience when the user explicitly declines it', async (t) => {
+  const response = await createService(t, backgroundPlan).handleMessage({ userId: firstUserId, message: '不要背景音，只陪我聊聊天' });
+  assert.equal(response.audioMode, 'voice');
+  assert.equal(response.audio, undefined);
+});
+
 test('changes the recommendation after an explicit dislike', async (t) => {
   const service = createService(t, backgroundPlan);
   const first = await service.handleMessage({ userId: firstUserId, message: '请放一点雨声陪我' });

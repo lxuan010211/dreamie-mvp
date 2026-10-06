@@ -54,7 +54,7 @@ test('plays and stops voice plus background layers together', async () => {
   const player = createAudioPlaybackController({ AudioCtor: FakeAudio });
 
   player.loadVoice('voice', { mode: 'voice_with_background' });
-  player.loadBackground('/api/audio/spring-rain');
+  player.loadBackground('/api/audio/spring-rain', { preserveVoice: true, mode: 'voice_with_background' });
   await player.play();
 
   assert.equal(FakeAudio.instances[0].playCalls, 1);
@@ -73,5 +73,28 @@ test('keeps a manual play state when autoplay is blocked', async () => {
   FakeAudio.instances[0].rejectPlay = true;
 
   await assert.rejects(() => player.play(), /autoplay blocked/);
+  assert.equal(player.getState(), 'ready');
+});
+
+test('replaces the previous voice layer when loading background-only audio', async () => {
+  FakeAudio.instances = [];
+  const player = createAudioPlaybackController({ AudioCtor: FakeAudio });
+  player.loadVoice('old-voice');
+  player.stop();
+  player.loadBackground('/api/audio/rain');
+  await player.play();
+  assert.equal(FakeAudio.instances[0].playCalls, 0);
+  assert.equal(FakeAudio.instances[1].playCalls, 1);
+});
+
+test('stops the successful layer when a mixed playback layer rejects', async () => {
+  FakeAudio.instances = [];
+  const player = createAudioPlaybackController({ AudioCtor: FakeAudio });
+  player.loadVoice('voice', { mode: 'voice_with_background' });
+  player.loadBackground('/api/audio/rain', { preserveVoice: true, mode: 'voice_with_background' });
+  FakeAudio.instances[1].rejectPlay = true;
+  await assert.rejects(() => player.play(), /autoplay blocked/);
+  assert.equal(FakeAudio.instances[0].paused, true);
+  assert.equal(FakeAudio.instances[1].paused, true);
   assert.equal(player.getState(), 'ready');
 });
