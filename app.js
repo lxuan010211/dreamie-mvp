@@ -49,6 +49,16 @@ export function shouldStartVoiceHold(target) {
   return !isInsideInteractiveControl && !['TEXTAREA', 'BUTTON', 'INPUT', 'SELECT', 'A'].includes(String(tagName).toUpperCase());
 }
 
+// Pointer capture improves long-press behaviour on desktop, but recording must
+// continue when a mobile browser rejects this optional interaction API.
+export function tryCapturePointer(target, pointerId) {
+  try {
+    target?.setPointerCapture?.(pointerId);
+  } catch {
+    // No action needed: pointer capture is not required for MediaRecorder.
+  }
+}
+
 export function getAudioFormat(mimeType) {
   const type = String(mimeType).toLowerCase();
   if (type.includes('mp4')) return 'mp4';
@@ -187,6 +197,7 @@ export function mountChat(root = document) {
       event.preventDefault();
       if (listening || pressing) return;
       pressing = true;
+      const pointerTarget = event.currentTarget;
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         if (!pressing) { stream.getTracks().forEach((track) => track.stop()); return; }
@@ -216,10 +227,14 @@ export function mountChat(root = document) {
         });
         recorder.start();
         setListening(true);
-        composer.setPointerCapture?.(event.pointerId);
+        tryCapturePointer(pointerTarget, event.pointerId);
       } catch (error) {
         pressing = false;
-        chat.setStatus('无法使用麦克风，请检查 HTTPS 与浏览器麦克风权限。');
+        stream?.getTracks().forEach((track) => track.stop());
+        stream = null;
+        recorder = null;
+        setListening(false);
+        chat.setStatus('无法启动录音，请检查浏览器麦克风权限。');
         render();
       }
     };

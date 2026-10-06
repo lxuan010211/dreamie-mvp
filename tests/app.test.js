@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createChatState, getAudioFormat, getOrCreateAnonymousUserId, shouldStartVoiceHold } from '../app.js';
+import { createChatState, getAudioFormat, getOrCreateAnonymousUserId, shouldStartVoiceHold, tryCapturePointer } from '../app.js';
 
 test('keeps one anonymous user ID in browser storage', () => {
   const values = new Map();
@@ -46,4 +46,14 @@ test('starts voice hold only from the conversation box background', () => {
 test('maps browser recording MIME types to DashScope audio formats', () => {
   assert.equal(getAudioFormat('audio/webm;codecs=opus'), 'webm');
   assert.equal(getAudioFormat('audio/mp4'), 'mp4');
+});
+
+test('does not fail recording when a browser rejects pointer capture', () => {
+  const target = {
+    setPointerCapture: () => {
+      throw new Error('pointer capture is unavailable');
+    },
+  };
+
+  assert.doesNotThrow(() => tryCapturePointer(target, 3));
 });
