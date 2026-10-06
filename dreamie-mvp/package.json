@@ -1,0 +1,25 @@
+{
+  "name": "dreamie-mvp",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/cli.ts",
+    "web": "tsx src/web-server.ts",
+    "test": "tsx --test test/**/*.test.ts",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@openai/agents": "latest",
+    "dotenv": "latest",
+    "openai": "latest",
+    "pg": "^8.23.1",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/pg": "^8.23.1",
+    "tsx": "latest",
+    "typescript": "latest"
+  }
+}

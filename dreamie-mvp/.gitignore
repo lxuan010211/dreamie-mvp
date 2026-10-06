@@ -4,3 +4,4 @@ generated-audio/
 data/dreamie.db
 data/dreamie.db-shm
 data/dreamie.db-wal
+.local-https/

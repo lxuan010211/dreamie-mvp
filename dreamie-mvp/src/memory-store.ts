@@ -8,7 +8,7 @@ export type MemoryPolarity = 'positive' | 'negative';
 export type MemorySource = 'explicit' | 'behavioral';
 
 export interface UserProfile {
-  userId: 'local-user';
+  userId: string;
   timezone: string;
   voiceId: string | null;
   voiceSpeed: number | null;
@@ -52,11 +52,11 @@ const defaultProfile: UserProfile = {
   voiceSpeed: null,
 };
 
-export function openMemoryStore(databasePath: string): MemoryStore {
+export function openMemoryStore(databasePath: string, userId: string = localUserId): MemoryStore {
   mkdirSync(dirname(databasePath), { recursive: true });
   const database = new DatabaseSync(databasePath);
   initializeDatabase(database);
-  return new SqliteMemoryStore(database);
+  return new SqliteMemoryStore(database, userId);
 }
 
 export function openMemoryStoreOrNull(databasePath: string, onUnavailable: () => void): MemoryStore {
@@ -69,13 +69,13 @@ export function openMemoryStoreOrNull(databasePath: string, onUnavailable: () =>
 }
 
 class SqliteMemoryStore implements MemoryStore {
-  constructor(private readonly database: DatabaseSync) {}
+  constructor(private readonly database: DatabaseSync, private readonly userId: string) {}
 
   startSession(): string {
     const id = randomUUID();
     this.database
       .prepare('INSERT INTO sessions (id, user_id, started_at) VALUES (?, ?, ?)')
-      .run(id, localUserId, now());
+      .run(id, this.userId, now());
     return id;
   }
 
@@ -90,12 +90,12 @@ class SqliteMemoryStore implements MemoryStore {
       .prepare(
         'INSERT INTO listening_events (id, session_id, user_id, track_id, event_type, created_at) VALUES (?, ?, ?, ?, ?, ?)',
       )
-      .run(randomUUID(), input.sessionId, localUserId, input.trackId, input.eventType, now());
+      .run(randomUUID(), input.sessionId, this.userId, input.trackId, input.eventType, now());
   }
 
   listEvents(filter: { trackId?: string; since?: string }): ListeningEvent[] {
     let statement = 'SELECT id, session_id, track_id, event_type, created_at FROM listening_events WHERE user_id = ?';
-    const parameters: string[] = [localUserId];
+    const parameters: string[] = [this.userId];
 
     if (filter.trackId) {
       statement += ' AND track_id = ?';
@@ -119,14 +119,14 @@ class SqliteMemoryStore implements MemoryStore {
   getProfile(): UserProfile {
     const row = this.database
       .prepare('SELECT user_id, timezone, voice_id, voice_speed FROM user_profile WHERE user_id = ?')
-      .get(localUserId);
+      .get(this.userId);
 
     if (!row) {
       return defaultProfile;
     }
 
     return {
-      userId: localUserId,
+      userId: this.userId,
       timezone: String(row.timezone),
       voiceId: row.voice_id === null ? null : String(row.voice_id),
       voiceSpeed: row.voice_speed === null ? null : Number(row.voice_speed),
@@ -150,7 +150,7 @@ class SqliteMemoryStore implements MemoryStore {
       )
       .run(
         randomUUID(),
-        localUserId,
+        this.userId,
         input.key,
         input.value,
         input.polarity,
@@ -168,7 +168,7 @@ class SqliteMemoryStore implements MemoryStore {
       .prepare(
         'SELECT id, memory_key, value, polarity, confidence, evidence_count, source, last_confirmed_at FROM memory_items WHERE user_id = ? ORDER BY updated_at ASC',
       )
-      .all(localUserId)
+      .all(this.userId)
       .map((row) => ({
         id: String(row.id),
         key: String(row.memory_key),
@@ -182,7 +182,9 @@ class SqliteMemoryStore implements MemoryStore {
   }
 
   clearAll(): void {
-    this.database.exec('DELETE FROM listening_events; DELETE FROM memory_items; DELETE FROM sessions;');
+    this.database.prepare('DELETE FROM listening_events WHERE user_id = ?').run(this.userId);
+    this.database.prepare('DELETE FROM memory_items WHERE user_id = ?').run(this.userId);
+    this.database.prepare('DELETE FROM sessions WHERE user_id = ?').run(this.userId);
   }
 }
 
