@@ -135,7 +135,12 @@ export function createWebSessionService(dependencies: {
 
       if (session.track && action === 'play') {
         await record(session, session.track, 'played');
-        return responseFor(session, `正在播放「${session.track.title}」。`, 'playing');
+        return responseFor(
+          session,
+          `正在播放「${session.track.title}」。`,
+          'playing',
+          { audioMode: 'background', backgroundTrackId: session.track.id, autoplay: true },
+        );
       }
 
       if (session.track && (action === 'change' || action === 'dislike')) {
@@ -174,7 +179,9 @@ export function createWebSessionService(dependencies: {
       session.dialogue = addAssistantMessage(session.dialogue, plan.reply);
       session.mood = plan.mood;
       const explicitBackground = requestsBackgroundAudio(input.message);
-      const shouldAttachAudio = explicitBackground || plan.audioMode !== 'voice';
+      // The model may suggest an audio mode, but only an explicit user request
+      // or the bounded soft-recommendation policy may attach a background layer.
+      const shouldAttachAudio = explicitBackground;
       const shouldSuggest = !shouldAttachAudio && !session.dialogue.recommendationCooldown && shouldSoftRecommendBackgroundAudio(
         plan.mood,
         session.memory.preferredKinds,
@@ -196,8 +203,8 @@ export function createWebSessionService(dependencies: {
       const responsePlan = shouldSuggest
         ? { ...plan, audioMode: 'background' as const, backgroundTrackId: session.track?.id, recommendation: plan.recommendation ?? getBackgroundRecommendationText(session.track!), autoplay: false }
         : shouldAttachAudio
-          ? { ...plan, backgroundTrackId: session.track?.id }
-          : plan;
+          ? { ...plan, audioMode: 'voice_with_background' as const, backgroundTrackId: session.track?.id }
+          : { ...plan, audioMode: 'voice' as const, backgroundTrackId: undefined, recommendation: undefined };
       const responseText = shouldSuggest || shouldAttachAudio
         ? `${plan.reply}\n${getBackgroundRecommendationText(session.track!)}`
         : plan.reply;

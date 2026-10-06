@@ -10,7 +10,8 @@ import { createWebSessionService } from '../src/web-session.js';
 
 const voicePlan = { reply: '辛苦了，慢慢放松就好。', contentType: 'white_noise' as const, durationMinutes: 30, mood: 'tired' as const, audioScript: '现在让身体慢慢放松下来。', audioMode: 'voice' as const, autoplay: true };
 const backgroundPlan = { ...voicePlan, audioMode: 'background' as const, backgroundTrackId: 'spring-rain' };
-type TestPlan = typeof voicePlan | typeof backgroundPlan;
+const unsolicitedMixedPlan = { ...voicePlan, audioMode: 'voice_with_background' as const, backgroundTrackId: 'spring-rain' };
+type TestPlan = typeof voicePlan | typeof backgroundPlan | typeof unsolicitedMixedPlan;
 
 const firstUserId = '11111111-1111-4111-8111-111111111111';
 const secondUserId = '22222222-2222-4222-8222-222222222222';
@@ -32,17 +33,24 @@ test('returns a text recommendation and pending audio for a first message', asyn
   assert.doesNotMatch(response.reply, /要播放吗/);
 });
 
+test('ignores a model background mode when the user did not ask for audio', async (t) => {
+  const response = await createService(t, unsolicitedMixedPlan).handleMessage({ userId: firstUserId, message: '今天有点累，陪我聊聊天' });
+  assert.equal(response.audioMode, 'voice');
+  assert.equal(response.audio, undefined);
+});
+
 test('records play only after clear consent', async (t) => {
   const service = createService(t, backgroundPlan);
-  const first = await service.handleMessage({ userId: firstUserId, message: '今天很累' });
+  const first = await service.handleMessage({ userId: firstUserId, message: '请放一点雨声陪我' });
   const second = await service.handleMessage({ userId: firstUserId, sessionId: first.sessionId, message: '好' });
+  assert.equal(second.audioMode, 'background');
   assert.equal(second.audio?.state, 'playing');
   assert.deepEqual(service.getEventTypes(first.sessionId, firstUserId), ['recommended', 'played']);
 });
 
 test('changes the recommendation after an explicit dislike', async (t) => {
   const service = createService(t, backgroundPlan);
-  const first = await service.handleMessage({ userId: firstUserId, message: '今天很累' });
+  const first = await service.handleMessage({ userId: firstUserId, message: '请放一点雨声陪我' });
   const second = await service.handleMessage({ userId: firstUserId, sessionId: first.sessionId, message: '不喜欢' });
   assert.equal(second.audio, undefined);
   assert.match(second.reply, /不再推荐/);
