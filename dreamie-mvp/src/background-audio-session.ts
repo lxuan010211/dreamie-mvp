@@ -52,8 +52,9 @@ export function shouldSoftRecommendBackgroundAudio(
 
 export function requestsBackgroundAudio(input: string): boolean {
   const normalized = input.replace(/\s/g, '');
-  if (/(不要|别|不想|不用|无需|不需要|停止|关闭).{0,4}(雨声|白噪音|海浪|海风|壁炉|背景音|背景音乐)/.test(normalized)) return false;
-  return /(雨声|白噪音|海浪|海风|壁炉|背景音|背景音乐)/.test(normalized)
+  const ambience = '雨声|白噪音|海浪|海风|壁炉|背景音|背景音乐|bgm|轻音乐|氛围音|环境音';
+  if (new RegExp(`(不要|别|不想|不用|无需|不需要|停止|关闭).{0,4}(${ambience})`, 'i').test(normalized)) return false;
+  return new RegExp(`(${ambience})`, 'i').test(normalized)
     && /(请|想|要|放|播放|听|来点|配|伴着|陪我)/.test(normalized);
 }
 
@@ -86,9 +87,10 @@ export function recommendBackgroundAudio(
 }
 
 export function getBackgroundAudioAction(input: string): BackgroundAudioAction {
-  const normalized = input.trim().toLowerCase();
+  const normalized = input.trim().toLowerCase().replace(/[，。！？,.!?]/g, '').replace(/\s+/g, '');
 
-  if (/^(好|好的|好啊|可以|可以的|播放|开始|行|嗯|yes|y)$/.test(normalized)) {
+  if (/^(好|好的|好啊|可以|可以的|播放|开始|行|嗯|yes|y)(播放吧|放吧|开始吧|听吧)?$/.test(normalized)
+    || /^(就这个|这个可以|我想听这个|来吧)$/.test(normalized)) {
     return 'play';
   }
 

@@ -37,6 +37,7 @@ test('recommends a gentle matching track and switches after the user asks for an
 
 test('only treats clear consent as permission to play audio', () => {
   assert.equal(getBackgroundAudioAction('好'), 'play');
+  assert.equal(getBackgroundAudioAction('好，播放吧'), 'play');
   assert.equal(getBackgroundAudioAction('换一个'), 'change');
   assert.equal(getBackgroundAudioAction('我其实更想听雨声'), 'continue');
 });
@@ -54,6 +55,7 @@ test('recognizes explicit like and dislike feedback', () => {
 
 test('recognizes affirmative ambience requests but ignores negative mentions', () => {
   assert.equal(requestsBackgroundAudio('请放一点雨声陪我'), true);
+  assert.equal(requestsBackgroundAudio('我想听一点BGM'), true);
   assert.equal(requestsBackgroundAudio('不要背景音，只陪我聊聊天'), false);
 });
 

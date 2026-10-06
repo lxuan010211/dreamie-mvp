@@ -48,6 +48,16 @@ test('records play only after clear consent', async (t) => {
   assert.deepEqual(service.getEventTypes(first.sessionId, firstUserId), ['recommended', 'played']);
 });
 
+test('plays the pending recommendation after natural consent wording', async (t) => {
+  const service = createService(t, backgroundPlan);
+  const first = await service.handleMessage({ userId: firstUserId, message: '我想听一点BGM' });
+  const second = await service.handleMessage({ userId: firstUserId, sessionId: first.sessionId, message: '好，播放吧' });
+  assert.equal(first.audioMode, 'background');
+  assert.equal(second.audioMode, 'background');
+  assert.equal(second.audio?.state, 'playing');
+  assert.deepEqual(service.getEventTypes(first.sessionId, firstUserId), ['recommended', 'played']);
+});
+
 test('preserves the generated sleep script for the web TTS layer', async (t) => {
   const response = await createService(t).handleMessage({ userId: firstUserId, message: '讲一段放松引导' });
   assert.equal(response.audioScript, voicePlan.audioScript);
