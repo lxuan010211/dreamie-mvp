@@ -7,6 +7,10 @@ export const sleepPlanSchema = z.object({
   durationMinutes: z.number().int().min(5).max(60),
   mood: z.enum(['overthinking', 'tired', 'stressed', 'restless', 'calm', 'sad', 'unknown']),
   audioScript: z.string().trim().min(30).max(1200),
+  audioMode: z.enum(['voice', 'background', 'voice_with_background']).default('voice'),
+  backgroundTrackId: z.string().trim().min(1).optional(),
+  recommendation: z.string().trim().min(1).max(160).optional(),
+  autoplay: z.boolean().default(true),
 });
 
 export type SleepPlan = z.infer<typeof sleepPlanSchema>;
@@ -22,7 +26,11 @@ Reply in Simplified Chinese and return only valid JSON with this exact shape:
   "contentType": "breathing | white_noise | sleep_story | meditation",
   "durationMinutes": 5 to 60,
   "mood": "overthinking | tired | stressed | restless | calm | sad | unknown",
-  "audioScript": "a short spoken sleep script"
+  "audioScript": "a short spoken sleep script",
+  "audioMode": "voice | background | voice_with_background",
+  "backgroundTrackId": "an optional safe audio catalog ID",
+  "recommendation": "an optional natural, non-pushy suggestion",
+  "autoplay": true or false
 }
 `;
 

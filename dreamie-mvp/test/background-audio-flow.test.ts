@@ -10,6 +10,8 @@ const tiredPlan: SleepPlan = {
   durationMinutes: 30,
   mood: 'tired',
   audioScript: '现在不用急着入睡，让身体慢慢沉下来，跟着平稳的呼吸感受夜晚的安静。',
+  audioMode: 'voice',
+  autoplay: true,
 };
 
 test('keeps chatting before playing only after a clear confirmation', async () => {

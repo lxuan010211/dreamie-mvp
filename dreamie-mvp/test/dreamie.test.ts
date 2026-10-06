@@ -14,6 +14,26 @@ test('accepts a complete playable sleep plan', () => {
 
   assert.equal(plan.contentType, 'breathing');
   assert.equal(plan.durationMinutes, 10);
+  assert.equal(plan.audioMode, 'voice');
+  assert.equal(plan.autoplay, true);
+});
+
+test('accepts a story plan with a background track', () => {
+  const plan = sleepPlanSchema.parse({
+    reply: '我给你讲一个很短的故事。',
+    contentType: 'sleep_story',
+    durationMinutes: 15,
+    mood: 'tired',
+    audioScript: '现在让身体慢慢放松下来，听一段安静的小故事，让思绪像月光一样轻轻落在窗边。',
+    audioMode: 'voice_with_background',
+    backgroundTrackId: 'rain-gentle',
+    recommendation: '如果你愿意，可以让一点雨声陪着这个故事。',
+    autoplay: false,
+  });
+
+  assert.equal(plan.audioMode, 'voice_with_background');
+  assert.equal(plan.backgroundTrackId, 'rain-gentle');
+  assert.equal(plan.autoplay, false);
 });
 
 test('rejects content outside the MVP sleep modes', () => {

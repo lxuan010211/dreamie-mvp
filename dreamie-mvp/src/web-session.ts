@@ -22,6 +22,10 @@ import {
 export interface WebChatResponse {
   sessionId: string;
   reply: string;
+  audioMode: SleepPlan['audioMode'];
+  backgroundTrackId?: string;
+  recommendation?: string;
+  autoplay: boolean;
   audio?: {
     trackId: string;
     title: string;
@@ -97,10 +101,15 @@ export function createWebSessionService(dependencies: {
     session: WebSession,
     reply: string,
     state: 'pending' | 'playing',
+    audioPlan?: Pick<SleepPlan, 'audioMode' | 'backgroundTrackId' | 'recommendation' | 'autoplay'>,
   ): WebChatResponse {
     return {
       sessionId: session.id,
       reply,
+      audioMode: audioPlan?.audioMode ?? 'voice',
+      backgroundTrackId: audioPlan?.backgroundTrackId,
+      recommendation: audioPlan?.recommendation,
+      autoplay: audioPlan?.autoplay ?? true,
       audio: session.track
         ? {
             trackId: session.track.id,
@@ -161,6 +170,7 @@ export function createWebSessionService(dependencies: {
         session,
         `${plan.reply}\n${getBackgroundRecommendationText(session.track)}`,
         'pending',
+        plan,
       );
     },
 

@@ -8,7 +8,7 @@ import { openMemoryStore } from '../src/memory-store.js';
 import { createMemoryStoreFactory } from '../src/memory-store-factory.js';
 import { createWebSessionService } from '../src/web-session.js';
 
-const plan = { reply: '辛苦了，慢慢放松就好。', contentType: 'white_noise' as const, durationMinutes: 30, mood: 'tired' as const, audioScript: '现在让身体慢慢放松下来。' };
+const plan = { reply: '辛苦了，慢慢放松就好。', contentType: 'white_noise' as const, durationMinutes: 30, mood: 'tired' as const, audioScript: '现在让身体慢慢放松下来。', audioMode: 'voice' as const, autoplay: true };
 
 const firstUserId = '11111111-1111-4111-8111-111111111111';
 const secondUserId = '22222222-2222-4222-8222-222222222222';
@@ -24,6 +24,8 @@ function createService(t: test.TestContext) {
 
 test('returns a text recommendation and pending audio for a first message', async (t) => {
   const response = await createService(t).handleMessage({ userId: firstUserId, message: '今天脑子停不下来' });
+  assert.equal(response.audioMode, 'voice');
+  assert.equal(response.autoplay, true);
   assert.equal(response.audio?.state, 'pending');
   assert.match(response.reply, /要播放吗/);
 });
