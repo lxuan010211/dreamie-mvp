@@ -40,7 +40,8 @@ async function main() {
 
   try {
     const getSleepPlan = async (prompt: string) => {
-      const result = await runner.run(createDreamieAgent(config.model), prompt, { maxTurns: 1 });
+      // The CLI keeps its original one-turn JSON flow; web sessions own the tool loop.
+      const result = await runner.run(createDreamieAgent(config.model, []), prompt, { maxTurns: 1 });
       if (!result.finalOutput) {
         throw new Error('模型没有返回睡前方案，请再试一次。');
       }

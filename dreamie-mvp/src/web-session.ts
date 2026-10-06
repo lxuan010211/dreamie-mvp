@@ -141,7 +141,7 @@ export function createWebSessionService(dependencies: {
       audioMode: audioPlan?.audioMode ?? 'voice',
       backgroundTrackId: audioPlan?.backgroundTrackId,
       recommendation: audioPlan?.recommendation,
-      autoplay: audioPlan?.autoplay ?? true,
+      autoplay: audioPlan?.autoplay ?? state === 'playing',
       ttsDataUrl: audioPlan?.audioMode === 'background' ? undefined : effects?.ttsDataUrl,
       ttsError: effects?.toolErrors?.find((message) => message.includes('语音')),
       audio: session.track

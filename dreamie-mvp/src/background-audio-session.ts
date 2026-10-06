@@ -98,7 +98,7 @@ export function getBackgroundAudioAction(input: string): BackgroundAudioAction {
     return 'change';
   }
 
-  if (/^(喜欢|我喜欢)$/.test(normalized)) {
+  if (/^(喜欢|我喜欢|我喜欢这个)$/.test(normalized)) {
     return 'like';
   }
 

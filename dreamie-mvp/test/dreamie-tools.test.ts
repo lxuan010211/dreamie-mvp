@@ -25,8 +25,6 @@ function createContext(overrides: Partial<DreamieToolContext> = {}): DreamieTool
     preferredKinds: ['rain'],
     excludedTrackIds: ['ocean-waves'],
     playbackAllowed: false,
-    allowedVoiceIds: ['female-test'],
-    allowedSpeeds: [0.8],
     effects: {},
     recommendTrack: async () => springRain,
     synthesizeSpeech: async () => 'data:audio/mpeg;base64,AAE=',
@@ -116,8 +114,8 @@ test('rejects an unselected track without creating a playback effect', async () 
   assert.equal(context.effects.playback, undefined);
 });
 
-test('stores generated TTS data in server-only effects', async () => {
-  const calls: Array<{ text: string; voiceId: string; speed: number }> = [];
+test('stores generated TTS data in server-only effects without exposing voice configuration to the model', async () => {
+  const calls: Array<{ text: string }> = [];
   const context = createContext({
     synthesizeSpeech: async (input) => {
       calls.push(input);
@@ -126,15 +124,11 @@ test('stores generated TTS data in server-only effects', async () => {
   });
   const result = await invoke(context, 'generate_tts', {
     text: '现在让肩膀轻轻放松，呼吸慢一点。',
-    voiceId: 'female-test',
-    speed: 0.8,
   });
 
   assert.deepEqual(result, { status: 'ready', format: 'mp3' });
   assert.deepEqual(calls, [{
     text: '现在让肩膀轻轻放松，呼吸慢一点。',
-    voiceId: 'female-test',
-    speed: 0.8,
   }]);
   assert.equal(context.effects.ttsDataUrl, 'data:audio/mpeg;base64,AAE=');
 });
@@ -142,6 +136,7 @@ test('stores generated TTS data in server-only effects', async () => {
 test('writes only explicit listening feedback to memory', async () => {
   const saved: Array<{ event: 'liked' | 'disliked'; target: 'background' | 'voice' | 'content' }> = [];
   const context = createContext({
+    allowedMemoryFeedback: { event: 'liked', target: 'background' },
     saveMemory: async (input) => { saved.push(input); },
   });
   const result = await invoke(context, 'save_sleep_memory', {
@@ -151,6 +146,19 @@ test('writes only explicit listening feedback to memory', async () => {
 
   assert.deepEqual(result, { status: 'saved' });
   assert.deepEqual(saved, [{ event: 'liked', target: 'background' }]);
+});
+
+test('does not persist inferred or replayed memory feedback', async () => {
+  const saved: Array<{ event: 'liked' | 'disliked'; target: 'background' | 'voice' | 'content' }> = [];
+  const context = createContext({
+    allowedMemoryFeedback: { event: 'liked', target: 'background' },
+    saveMemory: async (input) => { saved.push(input); },
+  });
+
+  const result = await invoke(context, 'save_sleep_memory', { event: 'disliked', target: 'background' });
+
+  assert.deepEqual(result, { status: 'ignored', message: '只有当前消息中明确表达的偏好才会保存。' });
+  assert.deepEqual(saved, []);
 });
 
 test('uses the configured MiniMax voice and speed through the TTS adapter', async () => {
@@ -180,8 +188,6 @@ test('uses the configured MiniMax voice and speed through the TTS adapter', asyn
 
   const result = await invoke(context, 'generate_tts', {
     text: '让呼吸慢一点，肩膀也轻轻放松。',
-    voiceId: 'female-test',
-    speed: 0.8,
   });
 
   assert.deepEqual(result, { status: 'ready', format: 'mp3' });
@@ -213,8 +219,6 @@ test('keeps the conversation usable when MiniMax TTS fails', async () => {
 
   const result = await invoke(context, 'generate_tts', {
     text: '让呼吸慢一点，肩膀也轻轻放松。',
-    voiceId: 'female-test',
-    speed: 0.8,
   });
 
   assert.deepEqual(result, { status: 'unavailable', message: '语音暂时不可用。' });

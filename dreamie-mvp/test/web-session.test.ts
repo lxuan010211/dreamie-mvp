@@ -63,6 +63,18 @@ test('plays the pending recommendation after natural consent wording', async (t)
   assert.deepEqual(service.getEventTypes(first.sessionId, firstUserId), ['recommended', 'played']);
 });
 
+test('keeps changed and liked recommendations pending until a separate play confirmation', async (t) => {
+  const service = createService(t, backgroundPlan);
+  const first = await service.handleMessage({ userId: firstUserId, message: '请放一点雨声陪我' });
+  const changed = await service.handleMessage({ userId: firstUserId, sessionId: first.sessionId, message: '换一个' });
+  const liked = await service.handleMessage({ userId: firstUserId, sessionId: first.sessionId, message: '我喜欢这个' });
+
+  assert.equal(changed.audio?.state, 'pending');
+  assert.equal(changed.autoplay, false);
+  assert.equal(liked.audio?.state, 'pending');
+  assert.equal(liked.autoplay, false);
+});
+
 test('preserves the generated sleep script for the web TTS layer', async (t) => {
   const response = await createService(t).handleMessage({ userId: firstUserId, message: '讲一段放松引导' });
   assert.equal(response.audioScript, voicePlan.audioScript);

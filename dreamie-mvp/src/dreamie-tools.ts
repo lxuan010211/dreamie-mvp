@@ -30,8 +30,6 @@ export interface DreamieToolContext {
   preferredKinds: SleepAudioKind[];
   excludedTrackIds: string[];
   playbackAllowed: boolean;
-  allowedVoiceIds: string[];
-  allowedSpeeds: number[];
   effects: DreamieToolEffects;
   recommendTrack(input: {
     mood: SleepPlan['mood'];
@@ -39,11 +37,12 @@ export interface DreamieToolContext {
     excludedTrackIds: string[];
     intent: 'background' | 'story' | 'meditation';
   }): Promise<DreamieToolTrack>;
-  synthesizeSpeech(input: {
-    text: string;
-    voiceId: string;
-    speed: number;
-  }): Promise<string>;
+  synthesizeSpeech(input: { text: string }): Promise<string>;
+  /** Set only for feedback verified from the current user message. */
+  allowedMemoryFeedback?: {
+    event: 'liked' | 'disliked';
+    target: 'background' | 'voice' | 'content';
+  };
   saveMemory(input: {
     event: 'liked' | 'disliked';
     target: 'background' | 'voice' | 'content';
@@ -68,8 +67,6 @@ const recommendationInput = z.object({
 
 const ttsInput = z.object({
   text: z.string().trim().min(1).max(1200),
-  voiceId: z.string().trim().min(1).max(80),
-  speed: z.number().min(0.5).max(1.5),
 });
 
 const memoryInput = z.object({
@@ -103,8 +100,6 @@ export function createDreamieToolContext(options: CreateDreamieToolContextOption
     preferredKinds: options.preferredKinds,
     excludedTrackIds: options.excludedTrackIds,
     playbackAllowed: options.playbackAllowed,
-    allowedVoiceIds: [options.ttsConfig.voiceId],
-    allowedSpeeds: [options.ttsConfig.speed],
     effects: {},
     recommendTrack: async () => {
       const track = recommendBackgroundAudio(
@@ -117,9 +112,9 @@ export function createDreamieToolContext(options: CreateDreamieToolContextOption
       }
       return toToolTrack(track);
     },
-    synthesizeSpeech: ({ text, voiceId, speed }) => synthesizeMiniMaxSpeech(
+    synthesizeSpeech: ({ text }) => synthesizeMiniMaxSpeech(
       text,
-      { ...options.ttsConfig, voiceId, speed },
+      options.ttsConfig,
       options.fetchImpl,
     ),
     saveMemory: options.saveMemory,
@@ -163,8 +158,6 @@ export function createDreamieTools(): FunctionTool<DreamieToolContext, any>[] {
       strict: true,
       execute: async (input, runContext) => {
         const context = getContext(runContext);
-        if (!context.allowedVoiceIds.includes(input.voiceId)) throw new Error('Requested voice is not allowed.');
-        if (!context.allowedSpeeds.includes(input.speed)) throw new Error('Requested speech speed is not allowed.');
         try {
           context.effects.ttsDataUrl = await context.synthesizeSpeech(input);
           return { status: 'ready', format: 'mp3' };
@@ -181,6 +174,12 @@ export function createDreamieTools(): FunctionTool<DreamieToolContext, any>[] {
       strict: true,
       execute: async (input, runContext) => {
         const context = getContext(runContext);
+        if (
+          context.allowedMemoryFeedback?.event !== input.event
+          || context.allowedMemoryFeedback.target !== input.target
+        ) {
+          return { status: 'ignored', message: '只有当前消息中明确表达的偏好才会保存。' };
+        }
         try {
           await context.saveMemory(input);
           return { status: 'saved' };

@@ -51,6 +51,7 @@ test('prefers rain when it matches the user memory and current mood', () => {
 
 test('recognizes explicit like and dislike feedback', () => {
   assert.equal(getBackgroundAudioAction('喜欢'), 'like');
+  assert.equal(getBackgroundAudioAction('我喜欢这个'), 'like');
   assert.equal(getBackgroundAudioAction('不要再推荐'), 'dislike');
 });
 
