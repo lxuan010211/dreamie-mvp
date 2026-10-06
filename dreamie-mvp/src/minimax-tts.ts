@@ -46,12 +46,12 @@ export function decodeMiniMaxSpeechResponse(payload: unknown): Uint8Array {
   return Buffer.from(hexAudio, 'hex');
 }
 
-export async function generateMiniMaxSpeech(
+async function requestMiniMaxSpeech(
   text: string,
   config: MiniMaxTtsConfig,
-  outputDirectory: string,
-): Promise<string> {
-  const response = await fetch(miniMaxSpeechEndpoint, {
+  fetchImpl: typeof fetch = fetch,
+): Promise<Uint8Array> {
+  const response = await fetchImpl(miniMaxSpeechEndpoint, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
@@ -66,7 +66,24 @@ export async function generateMiniMaxSpeech(
     throw new Error(message ?? `MiniMax TTS request failed with HTTP ${response.status}`);
   }
 
-  const audio = decodeMiniMaxSpeechResponse(payload);
+  return decodeMiniMaxSpeechResponse(payload);
+}
+
+export async function synthesizeMiniMaxSpeech(
+  text: string,
+  config: MiniMaxTtsConfig,
+  fetchImpl: typeof fetch = fetch,
+): Promise<string> {
+  const audio = await requestMiniMaxSpeech(text, config, fetchImpl);
+  return `data:audio/mpeg;base64,${Buffer.from(audio).toString('base64')}`;
+}
+
+export async function generateMiniMaxSpeech(
+  text: string,
+  config: MiniMaxTtsConfig,
+  outputDirectory: string,
+): Promise<string> {
+  const audio = await requestMiniMaxSpeech(text, config);
   await mkdir(outputDirectory, { recursive: true });
 
   const outputPath = path.join(outputDirectory, `dreamie-${Date.now()}.mp3`);

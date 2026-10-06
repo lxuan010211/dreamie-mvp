@@ -5,6 +5,7 @@ import {
   buildMiniMaxSpeechRequest,
   decodeMiniMaxSpeechResponse,
   miniMaxSpeechEndpoint,
+  synthesizeMiniMaxSpeech,
 } from '../src/minimax-tts.js';
 
 test('uses the MiniMax compatibility endpoint', () => {
@@ -47,4 +48,18 @@ test('decodes a successful MiniMax hex audio response', () => {
   });
 
   assert.deepEqual([...audio], [0, 1, 2, 255]);
+});
+
+test('synthesizes browser-playable MP3 data without writing a server file', async () => {
+  const audio = await synthesizeMiniMaxSpeech('今晚慢慢放松。', {
+    apiKey: 'test-key',
+    model: 'speech-2.6-hd',
+    speed: 0.8,
+    voiceId: 'female-test',
+  }, async () => new Response(JSON.stringify({
+    base_resp: { status_code: 0, status_msg: 'success' },
+    data: { audio: '000102ff', status: 2 },
+  }), { status: 200 }));
+
+  assert.equal(audio, 'data:audio/mpeg;base64,AAEC/w==');
 });

@@ -7,10 +7,11 @@ import dotenv from 'dotenv';
 import { OpenAIProvider, Runner, setTracingDisabled } from '@openai/agents';
 
 import { findSleepAudioById } from './audio-catalog.js';
-import { loadConfig, loadDashScopeAsrConfig, loadMemoryStoreConfig } from './config.js';
+import { loadConfig, loadDashScopeAsrConfig, loadMemoryStoreConfig, loadMiniMaxTtsConfig } from './config.js';
 import { createDashScopeAsr } from './dashscope-asr.js';
 import { createDreamieAgent, parseSleepPlan } from './dreamie.js';
 import { createMemoryStoreFactory } from './memory-store-factory.js';
+import { synthesizeMiniMaxSpeech } from './minimax-tts.js';
 import { createWebSessionService } from './web-session.js';
 
 dotenv.config({ path: '.env.local', quiet: true });
@@ -21,6 +22,7 @@ const staticFiles = new Map([['/', 'index.html'], ['/index.html', 'index.html'],
 
 export function createDreamieWebServer() {
   const config = loadConfig(process.env);
+  const ttsConfig = loadMiniMaxTtsConfig(process.env);
   const asrConfig = loadDashScopeAsrConfig(process.env);
   const asr = createDashScopeAsr(asrConfig);
   setTracingDisabled(true);
@@ -40,7 +42,13 @@ export function createDreamieWebServer() {
         const input = JSON.parse(body) as { userId?: string; sessionId?: string; message?: string };
         if (typeof input.message !== 'string') return json(response, 400, { error: '请输入文字消息。' });
         if (!isUuid(input.userId)) return json(response, 400, { error: '浏览器身份无效，请刷新页面后重试。' });
-        return json(response, 200, await sessions.handleMessage({ userId: input.userId, sessionId: input.sessionId, message: input.message }));
+        const result = await sessions.handleMessage({ userId: input.userId, sessionId: input.sessionId, message: input.message });
+        try {
+          const dataUrl = await synthesizeMiniMaxSpeech(result.reply, ttsConfig);
+          return json(response, 200, { ...result, tts: { dataUrl } });
+        } catch {
+          return json(response, 200, { ...result, ttsError: '语音暂时不可用，但文字回复仍然有效。' });
+        }
       }
       if (request.method === 'POST' && url.pathname === '/api/transcribe') {
         const body = await readJsonBody(request, 8_000_000, '录音太长，请控制在 5 分钟内。');

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createChatState, getAudioFormat, getOrCreateAnonymousUserId, shouldStartVoiceHold, tryCapturePointer } from '../app.js';
+import { createChatState, getAudioControlMode, getAudioFormat, getOrCreateAnonymousUserId, shouldStartVoiceHold, tryCapturePointer } from '../app.js';
 
 test('keeps one anonymous user ID in browser storage', () => {
   const values = new Map();
@@ -56,4 +56,10 @@ test('does not fail recording when a browser rejects pointer capture', () => {
   };
 
   assert.doesNotThrow(() => tryCapturePointer(target, 3));
+});
+
+test('switches the composer button between send, play, and stop modes', () => {
+  assert.equal(getAudioControlMode({ hasAudio: false, isSpeaking: false }), 'send');
+  assert.equal(getAudioControlMode({ hasAudio: true, isSpeaking: false }), 'play');
+  assert.equal(getAudioControlMode({ hasAudio: true, isSpeaking: true }), 'stop');
 });

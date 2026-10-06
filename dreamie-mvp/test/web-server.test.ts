@@ -46,12 +46,16 @@ test('rejects a missing or malformed anonymous browser ID before chat handling',
 });
 
 function configureTestEnvironment(): () => void {
-  const names = ['DEEPSEEK_API_KEY', 'DEEPSEEK_MODEL', 'DASHSCOPE_API_KEY', 'DASHSCOPE_ASR_MODEL'];
+  const names = ['DEEPSEEK_API_KEY', 'DEEPSEEK_MODEL', 'DASHSCOPE_API_KEY', 'DASHSCOPE_ASR_MODEL', 'MINIMAX_API_KEY', 'MINIMAX_TTS_MODEL', 'MINIMAX_TTS_SPEED', 'MINIMAX_TTS_VOICE_ID'];
   const before = new Map(names.map((name) => [name, process.env[name]]));
   process.env.DEEPSEEK_API_KEY = 'test-key';
   process.env.DEEPSEEK_MODEL = 'deepseek-flash';
   process.env.DASHSCOPE_API_KEY = 'test-key';
   process.env.DASHSCOPE_ASR_MODEL = 'fun-asr-flash-2026-06-15';
+  process.env.MINIMAX_API_KEY = 'test-key';
+  process.env.MINIMAX_TTS_MODEL = 'speech-2.6-hd';
+  process.env.MINIMAX_TTS_SPEED = '0.8';
+  process.env.MINIMAX_TTS_VOICE_ID = 'female-test';
   return () => {
     for (const name of names) {
       const value = before.get(name);

@@ -59,6 +59,12 @@ export function tryCapturePointer(target, pointerId) {
   }
 }
 
+export function getAudioControlMode({ hasAudio, isSpeaking }) {
+  if (isSpeaking) return 'stop';
+  if (hasAudio) return 'play';
+  return 'send';
+}
+
 export function getAudioFormat(mimeType) {
   const type = String(mimeType).toLowerCase();
   if (type.includes('mp4')) return 'mp4';
@@ -100,13 +106,66 @@ export function mountChat(root = document) {
   let sessionId = localStorage.getItem('dreamie-session-id') || '';
   const userId = getOrCreateAnonymousUserId();
   let pendingAudio = null;
+  let speechAudio = null;
+  let speechState = 'idle';
+
+  const stopSpeech = () => {
+    if (speechAudio) {
+      speechAudio.pause();
+      speechAudio.currentTime = 0;
+    }
+    speechAudio = null;
+    speechState = 'idle';
+    render();
+  };
+
+  const playSpeech = async () => {
+    if (!speechAudio) return;
+    speechState = 'playing';
+    render();
+    try {
+      await speechAudio.play();
+    } catch {
+      speechState = 'ready';
+      chat.setStatus('轻触播放键，开始听 Dreamie 的回复。');
+      render();
+    }
+  };
+
+  const prepareSpeech = (dataUrl) => {
+    stopSpeech();
+    speechAudio = new Audio(dataUrl);
+    speechState = 'ready';
+    speechAudio.addEventListener('ended', stopSpeech, { once: true });
+    speechAudio.addEventListener('error', () => {
+      speechAudio = null;
+      speechState = 'idle';
+      chat.setStatus('文字回复已完成，但语音暂时无法播放。');
+      render();
+    }, { once: true });
+    void playSpeech();
+  };
+
+  const renderAudioButton = () => {
+    const mode = getAudioControlMode({ hasAudio: Boolean(speechAudio), isSpeaking: speechState === 'playing' });
+    const icons = {
+      send: '<path d="m20.5 3.5-17 7.25 7.1 2.15 2.15 7.1 7.75-16.5ZM10.6 12.9l3.55-3.55" />',
+      play: '<path d="m8 5 11 7-11 7V5Z" />',
+      stop: '<path d="M7 7h10v10H7z" />',
+    };
+    sendButton.dataset.audioMode = mode;
+    sendButton.disabled = mode === 'send' && !chat.getSnapshot().draft.trim();
+    sendButton.setAttribute('aria-label', mode === 'stop' ? '停止播放' : mode === 'play' ? '播放 Dreamie 回复' : '发送消息');
+    sendButton.title = mode === 'stop' ? '停止播放' : mode === 'play' ? '播放 Dreamie 回复' : '发送消息';
+    sendButton.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[mode]}</svg>`;
+  };
 
   const updateComposer = () => {
     const snapshot = chat.getSnapshot();
     composer.value = snapshot.draft;
-    sendButton.disabled = !snapshot.draft.trim();
     composer.style.height = 'auto';
     composer.style.height = `${Math.min(composer.scrollHeight, 112)}px`;
+    renderAudioButton();
   };
 
   const render = () => {
@@ -126,6 +185,7 @@ export function mountChat(root = document) {
   };
 
   const sendMessage = async () => {
+    if (speechState !== 'idle') stopSpeech();
     chat.setDraft(composer.value);
     const text = chat.getSnapshot().draft.trim();
     if (!chat.send()) return;
@@ -143,6 +203,8 @@ export function mountChat(root = document) {
       localStorage.setItem('dreamie-session-id', sessionId);
       chat.addAssistantMessage(data.reply);
       if (data.audio?.url) { pendingAudio = new Audio(data.audio.url); if (data.audio.state === 'playing') pendingAudio.play().catch(() => {}); }
+      if (data.tts?.dataUrl) prepareSpeech(data.tts.dataUrl);
+      else if (data.ttsError) chat.setStatus(data.ttsError);
     } catch (error) {
       chat.setStatus(error instanceof Error ? `Dreamie 暂时无法回应：${error.message}` : 'Dreamie 暂时无法回应。');
     }
@@ -163,7 +225,11 @@ export function mountChat(root = document) {
     }
   });
 
-  sendButton.addEventListener('click', sendMessage);
+  sendButton.addEventListener('click', () => {
+    if (speechState === 'playing') return stopSpeech();
+    if (speechState === 'ready') return void playSpeech();
+    return void sendMessage();
+  });
 
   for (const button of promptButtons) {
     button.addEventListener('click', () => {
