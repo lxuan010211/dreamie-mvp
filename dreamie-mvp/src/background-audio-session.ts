@@ -90,7 +90,7 @@ export function getBackgroundAudioAction(input: string): BackgroundAudioAction {
   const normalized = input.trim().toLowerCase().replace(/[，。！？,.!?]/g, '').replace(/\s+/g, '');
 
   if (/^(好|好的|好啊|可以|可以的|播放|开始|行|嗯|yes|y)(播放吧|放吧|开始吧|听吧)?$/.test(normalized)
-    || /^(就这个|这个可以|我想听这个|来吧)$/.test(normalized)) {
+    || /^(好就播放这个|就这个|这个可以|我想听这个|来吧)$/.test(normalized)) {
     return 'play';
   }
 

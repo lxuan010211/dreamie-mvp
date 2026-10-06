@@ -38,6 +38,7 @@ test('recommends a gentle matching track and switches after the user asks for an
 test('only treats clear consent as permission to play audio', () => {
   assert.equal(getBackgroundAudioAction('好'), 'play');
   assert.equal(getBackgroundAudioAction('好，播放吧'), 'play');
+  assert.equal(getBackgroundAudioAction('好，就播放这个。'), 'play');
   assert.equal(getBackgroundAudioAction('换一个'), 'change');
   assert.equal(getBackgroundAudioAction('我其实更想听雨声'), 'continue');
 });
