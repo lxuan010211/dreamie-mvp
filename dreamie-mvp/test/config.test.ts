@@ -54,7 +54,32 @@ test('uses local SQLite memory storage by default', () => {
 
 test('loads PostgreSQL memory storage without exposing its URL', () => {
   assert.deepEqual(loadMemoryStoreConfig({ MEMORY_STORE: 'postgres', DATABASE_URL: 'postgres://secret@example.test/dreamie' }), {
-    kind: 'postgres', databaseUrl: 'postgres://secret@example.test/dreamie',
+    kind: 'postgres',
+    connection: { kind: 'connection-string', databaseUrl: 'postgres://secret@example.test/dreamie' },
   });
-  assert.throws(() => loadMemoryStoreConfig({ MEMORY_STORE: 'postgres' }), /DATABASE_URL/);
+  assert.throws(() => loadMemoryStoreConfig({ MEMORY_STORE: 'postgres' }), /DATABASE_URL or PGHOST/);
+});
+
+test('loads CloudBase PostgreSQL connection fields without requiring a hand-built URL', () => {
+  assert.deepEqual(
+    loadMemoryStoreConfig({
+      MEMORY_STORE: 'postgres',
+      PGHOST: 'db.internal.example',
+      PGPORT: '5432',
+      PGDATABASE: 'dreamie',
+      PGUSER: 'dreamie_app',
+      PGPASSWORD: 'password-with-special-characters',
+    }),
+    {
+      kind: 'postgres',
+      connection: {
+        kind: 'parameters',
+        host: 'db.internal.example',
+        port: 5432,
+        database: 'dreamie',
+        user: 'dreamie_app',
+        password: 'password-with-special-characters',
+      },
+    },
+  );
 });

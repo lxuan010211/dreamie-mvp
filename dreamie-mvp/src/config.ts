@@ -37,7 +37,19 @@ export type DashScopeAsrConfig = {
 
 export type MemoryStoreConfig =
   | { kind: 'sqlite'; databasePath: string }
-  | { kind: 'postgres'; databaseUrl: string };
+  | {
+      kind: 'postgres';
+      connection:
+        | { kind: 'connection-string'; databaseUrl: string }
+        | {
+            kind: 'parameters';
+            host: string;
+            port: number;
+            database: string;
+            user: string;
+            password: string;
+          };
+    };
 
 export function loadConfig(environment: Record<string, string | undefined>): DreamieConfig {
   const parsed = environmentSchema.parse(environment);
@@ -75,8 +87,22 @@ export function loadMemoryStoreConfig(environment: Record<string, string | undef
   if (kind === 'sqlite') return { kind, databasePath: 'data/dreamie.db' };
   if (kind === 'postgres') {
     const databaseUrl = environment.DATABASE_URL?.trim();
-    if (!databaseUrl) throw new Error('DATABASE_URL is required');
-    return { kind, databaseUrl };
+    if (databaseUrl) {
+      return { kind, connection: { kind: 'connection-string', databaseUrl } };
+    }
+
+    const host = environment.PGHOST?.trim();
+    const database = environment.PGDATABASE?.trim();
+    const user = environment.PGUSER?.trim();
+    const password = environment.PGPASSWORD;
+    const port = Number(environment.PGPORT?.trim() || '5432');
+    if (!host || !database || !user || !password || !Number.isSafeInteger(port) || port < 1 || port > 65_535) {
+      throw new Error('DATABASE_URL or PGHOST, PGPORT, PGDATABASE, PGUSER, and PGPASSWORD are required');
+    }
+    return {
+      kind,
+      connection: { kind: 'parameters', host, port, database, user, password },
+    };
   }
   throw new Error('MEMORY_STORE must be sqlite or postgres');
 }

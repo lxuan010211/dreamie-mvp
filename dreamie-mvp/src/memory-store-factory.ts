@@ -14,6 +14,14 @@ function asyncLocal(store: MemoryStore): AsyncMemoryStore {
 }
 export function createMemoryStoreFactory(config: MemoryStoreConfig): MemoryStoreFactory {
   if (config.kind === 'sqlite') return { forUser: async (userId) => asyncLocal(openMemoryStore(config.databasePath, userId)), close: async () => {} };
-  const pool = new Pool({ connectionString: config.databaseUrl });
+  const pool = config.connection.kind === 'connection-string'
+    ? new Pool({ connectionString: config.connection.databaseUrl })
+    : new Pool({
+        host: config.connection.host,
+        port: config.connection.port,
+        database: config.connection.database,
+        user: config.connection.user,
+        password: config.connection.password,
+      });
   return { forUser: (userId) => createPostgresMemoryStore(pool, userId), close: async () => { await pool.end(); } };
 }

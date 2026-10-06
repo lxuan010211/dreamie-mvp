@@ -10,7 +10,8 @@
    - `DEEPSEEK_API_KEY`、`DEEPSEEK_MODEL`
    - `MINIMAX_API_KEY`、`MINIMAX_TTS_MODEL`、`MINIMAX_TTS_VOICE_ID`、`MINIMAX_TTS_SPEED`
    - `DASHSCOPE_API_KEY`、`DASHSCOPE_ASR_MODEL`
-   - `DATABASE_URL`
+   - 从 PostgreSQL「配置 / 连接信息」填入 `PGHOST`、`PGPORT`、`PGDATABASE`、`PGUSER`、`PGPASSWORD`。这是推荐方式，不需要手动拼接连接字符串。
+   - 如控制台提供完整 URI，也可仅填写 `DATABASE_URL`，不必同时填写 `PG*` 字段。
    - `MEMORY_STORE=postgres`
 4. 等待版本状态为健康，复制控制台显示的默认 HTTPS 域名；不要使用本机 IP 或本地 HTTPS 证书。
 
