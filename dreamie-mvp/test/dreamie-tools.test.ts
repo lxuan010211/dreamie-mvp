@@ -4,10 +4,12 @@ import test from 'node:test';
 import { RunContext } from '@openai/agents';
 
 import {
+  createDreamieToolContext,
   createDreamieTools,
   type DreamieToolContext,
   type DreamieToolTrack,
 } from '../src/dreamie-tools.js';
+import { sleepAudioCatalog } from '../src/audio-catalog.js';
 
 const springRain: DreamieToolTrack = {
   id: 'spring-rain',
@@ -149,4 +151,97 @@ test('writes only explicit listening feedback to memory', async () => {
 
   assert.deepEqual(result, { status: 'saved' });
   assert.deepEqual(saved, [{ event: 'liked', target: 'background' }]);
+});
+
+test('uses the configured MiniMax voice and speed through the TTS adapter', async () => {
+  let requestBody = '';
+  const context = createDreamieToolContext({
+    userId: '11111111-1111-4111-8111-111111111111',
+    sessionId: 'session-1',
+    mood: 'tired',
+    preferredKinds: [],
+    excludedTrackIds: [],
+    playbackAllowed: false,
+    ttsConfig: {
+      apiKey: 'test-key',
+      model: 'speech-2.6-hd',
+      voiceId: 'female-test',
+      speed: 0.8,
+    },
+    saveMemory: async () => undefined,
+    fetchImpl: async (_url, init) => {
+      requestBody = String(init?.body);
+      return new Response(JSON.stringify({
+        base_resp: { status_code: 0, status_msg: 'success' },
+        data: { audio: '000102ff' },
+      }), { status: 200 });
+    },
+  });
+
+  const result = await invoke(context, 'generate_tts', {
+    text: '让呼吸慢一点，肩膀也轻轻放松。',
+    voiceId: 'female-test',
+    speed: 0.8,
+  });
+
+  assert.deepEqual(result, { status: 'ready', format: 'mp3' });
+  assert.match(requestBody, /"model":"speech-2.6-hd"/);
+  assert.match(requestBody, /"voice_id":"female-test"/);
+  assert.match(requestBody, /"speed":0.8/);
+  assert.equal(context.effects.ttsDataUrl, 'data:audio/mpeg;base64,AAEC/w==');
+});
+
+test('keeps the conversation usable when MiniMax TTS fails', async () => {
+  const context = createDreamieToolContext({
+    userId: '11111111-1111-4111-8111-111111111111',
+    sessionId: 'session-1',
+    mood: 'tired',
+    preferredKinds: [],
+    excludedTrackIds: [],
+    playbackAllowed: false,
+    ttsConfig: {
+      apiKey: 'test-key',
+      model: 'speech-2.6-hd',
+      voiceId: 'female-test',
+      speed: 0.8,
+    },
+    saveMemory: async () => undefined,
+    fetchImpl: async () => new Response(JSON.stringify({
+      base_resp: { status_code: 1001, status_msg: 'MiniMax unavailable' },
+    }), { status: 503 }),
+  });
+
+  const result = await invoke(context, 'generate_tts', {
+    text: '让呼吸慢一点，肩膀也轻轻放松。',
+    voiceId: 'female-test',
+    speed: 0.8,
+  });
+
+  assert.deepEqual(result, { status: 'unavailable', message: '语音暂时不可用。' });
+  assert.equal(context.effects.ttsDataUrl, undefined);
+  assert.deepEqual(context.effects.toolErrors, ['语音暂时不可用。']);
+});
+
+test('selects only an allowed catalog track and honors exclusions', async () => {
+  const context = createDreamieToolContext({
+    userId: '11111111-1111-4111-8111-111111111111',
+    sessionId: 'session-1',
+    mood: 'stressed',
+    preferredKinds: ['rain'],
+    excludedTrackIds: ['spring-rain'],
+    playbackAllowed: false,
+    ttsConfig: {
+      apiKey: 'test-key',
+      model: 'speech-2.6-hd',
+      voiceId: 'female-test',
+      speed: 0.8,
+    },
+    saveMemory: async () => undefined,
+  });
+
+  const result = await invoke(context, 'recommend_background_audio', { intent: 'background' }) as Record<string, unknown>;
+
+  assert.notEqual(result.trackId, 'spring-rain');
+  assert.ok(sleepAudioCatalog.some((track) => track.id === result.trackId));
+  assert.equal(context.effects.recommendedTrack?.id, result.trackId);
 });

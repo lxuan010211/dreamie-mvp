@@ -1,8 +1,11 @@
 import { tool, type FunctionTool, type RunContext } from '@openai/agents';
 import { z } from 'zod';
 
-import type { SleepAudioKind } from './audio-catalog.js';
+import type { SleepAudioKind, SleepAudioTrack } from './audio-catalog.js';
+import { recommendBackgroundAudio } from './background-audio-session.js';
+import type { MiniMaxTtsConfig } from './config.js';
 import type { SleepPlan } from './dreamie.js';
+import { synthesizeMiniMaxSpeech } from './minimax-tts.js';
 
 export interface DreamieToolTrack {
   id: string;
@@ -47,6 +50,18 @@ export interface DreamieToolContext {
   }): Promise<void>;
 }
 
+export interface CreateDreamieToolContextOptions {
+  userId: string;
+  sessionId: string;
+  mood: SleepPlan['mood'];
+  preferredKinds: SleepAudioKind[];
+  excludedTrackIds: string[];
+  playbackAllowed: boolean;
+  ttsConfig: MiniMaxTtsConfig;
+  saveMemory: DreamieToolContext['saveMemory'];
+  fetchImpl?: typeof fetch;
+}
+
 const recommendationInput = z.object({
   intent: z.enum(['background', 'story', 'meditation']),
 });
@@ -74,6 +89,41 @@ function getContext(runContext: RunContext<DreamieToolContext> | undefined): Dre
 function addToolError(context: DreamieToolContext, message: string): void {
   context.effects.toolErrors ??= [];
   context.effects.toolErrors.push(message);
+}
+
+function toToolTrack(track: SleepAudioTrack): DreamieToolTrack {
+  return { id: track.id, title: track.title, kind: track.kind };
+}
+
+export function createDreamieToolContext(options: CreateDreamieToolContextOptions): DreamieToolContext {
+  return {
+    userId: options.userId,
+    sessionId: options.sessionId,
+    mood: options.mood,
+    preferredKinds: options.preferredKinds,
+    excludedTrackIds: options.excludedTrackIds,
+    playbackAllowed: options.playbackAllowed,
+    allowedVoiceIds: [options.ttsConfig.voiceId],
+    allowedSpeeds: [options.ttsConfig.speed],
+    effects: {},
+    recommendTrack: async () => {
+      const track = recommendBackgroundAudio(
+        options.mood,
+        options.excludedTrackIds,
+        options.preferredKinds,
+      );
+      if (options.excludedTrackIds.includes(track.id)) {
+        throw new Error('No eligible background track remains.');
+      }
+      return toToolTrack(track);
+    },
+    synthesizeSpeech: ({ text, voiceId, speed }) => synthesizeMiniMaxSpeech(
+      text,
+      { ...options.ttsConfig, voiceId, speed },
+      options.fetchImpl,
+    ),
+    saveMemory: options.saveMemory,
+  };
 }
 
 export function createDreamieTools(): FunctionTool<DreamieToolContext, any>[] {
