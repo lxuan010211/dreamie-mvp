@@ -1,3 +1,5 @@
+import { createAudioPlaybackController } from './audio-player.js';
+
 export function createChatState() {
   let draft = '';
   const messages = [];
@@ -105,49 +107,44 @@ export function mountChat(root = document) {
   const chat = createChatState();
   let sessionId = localStorage.getItem('dreamie-session-id') || '';
   const userId = getOrCreateAnonymousUserId();
-  let pendingAudio = null;
-  let speechAudio = null;
   let speechState = 'idle';
+  let speechAvailable = false;
+  const audioPlayer = createAudioPlaybackController({
+    onStateChange: (nextState) => {
+      speechState = nextState;
+      if (nextState === 'idle') speechAvailable = false;
+      render();
+    },
+  });
 
   const stopSpeech = () => {
-    if (speechAudio) {
-      speechAudio.pause();
-      speechAudio.currentTime = 0;
-    }
-    speechAudio = null;
+    audioPlayer.stop();
+    speechAvailable = false;
     speechState = 'idle';
     render();
   };
 
   const playSpeech = async () => {
-    if (!speechAudio) return;
-    speechState = 'playing';
-    render();
+    if (!speechAvailable) return;
     try {
-      await speechAudio.play();
+      await audioPlayer.play();
     } catch {
-      speechState = 'ready';
       chat.setStatus('轻触播放键，开始听 Dreamie 的回复。');
       render();
     }
   };
 
-  const prepareSpeech = (dataUrl) => {
+  const prepareSpeech = (data) => {
     stopSpeech();
-    speechAudio = new Audio(dataUrl);
-    speechState = 'ready';
-    speechAudio.addEventListener('ended', stopSpeech, { once: true });
-    speechAudio.addEventListener('error', () => {
-      speechAudio = null;
-      speechState = 'idle';
-      chat.setStatus('文字回复已完成，但语音暂时无法播放。');
-      render();
-    }, { once: true });
-    void playSpeech();
+    if (data.tts?.dataUrl) audioPlayer.loadVoice(data.tts.dataUrl, { mode: data.audioMode });
+    if (data.background?.url) audioPlayer.loadBackground(data.background.url);
+    speechAvailable = Boolean(data.tts?.dataUrl || data.background?.url);
+    if (speechAvailable && data.autoplay !== false) void playSpeech();
+    else render();
   };
 
   const renderAudioButton = () => {
-    const mode = getAudioControlMode({ hasAudio: Boolean(speechAudio), isSpeaking: speechState === 'playing' });
+    const mode = getAudioControlMode({ hasAudio: speechAvailable, isSpeaking: speechState === 'playing' });
     const icons = {
       send: '<path d="m20.5 3.5-17 7.25 7.1 2.15 2.15 7.1 7.75-16.5ZM10.6 12.9l3.55-3.55" />',
       play: '<path d="m8 5 11 7-11 7V5Z" />',
@@ -189,9 +186,6 @@ export function mountChat(root = document) {
     chat.setDraft(composer.value);
     const text = chat.getSnapshot().draft.trim();
     if (!chat.send()) return;
-    if (pendingAudio && /^(好|好的|好啊|可以|可以的|播放|开始|行|嗯|yes|y)$/i.test(text)) {
-      pendingAudio.play().catch(() => chat.setStatus('轻触页面后再试一次播放。'));
-    }
     render();
     chat.setStatus('Dreamie 正在想一想…');
     render();
@@ -202,8 +196,7 @@ export function mountChat(root = document) {
       sessionId = data.sessionId;
       localStorage.setItem('dreamie-session-id', sessionId);
       chat.addAssistantMessage(data.reply);
-      if (data.audio?.url) { pendingAudio = new Audio(data.audio.url); if (data.audio.state === 'playing') pendingAudio.play().catch(() => {}); }
-      if (data.tts?.dataUrl) prepareSpeech(data.tts.dataUrl);
+      if (data.tts?.dataUrl || data.background?.url) prepareSpeech(data);
       else if (data.ttsError) chat.setStatus(data.ttsError);
     } catch (error) {
       chat.setStatus(error instanceof Error ? `Dreamie 暂时无法回应：${error.message}` : 'Dreamie 暂时无法回应。');
