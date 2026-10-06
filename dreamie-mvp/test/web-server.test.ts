@@ -16,6 +16,10 @@ test('lists both HTTP and local HTTPS preview addresses', () => {
   });
 });
 
+test('uses the configured local preview port in the HTTP address', () => {
+  assert.equal(getLocalPreviewUrls('127.0.0.1', 3001).http, 'http://127.0.0.1:3001');
+});
+
 test('builds a local certificate download address', () => {
   assert.equal(getLocalCertificateUrl('10.194.246.209'), 'http://10.194.246.209:3000/dreamie-local-ca.crt');
 });

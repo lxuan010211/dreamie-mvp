@@ -136,7 +136,7 @@ function json(response: import('node:http').ServerResponse, status: number, valu
 async function readJsonBody(request: import('node:http').IncomingMessage, limit: number, message: string) { let body = ''; for await (const chunk of request) { body += chunk; if (body.length > limit) throw new Error(message); } return body; }
 function lanIp() { for (const values of Object.values(networkInterfaces())) for (const value of values ?? []) if (value.family === 'IPv4' && !value.internal) return value.address; return '127.0.0.1'; }
 function isUuid(value: unknown): value is string { return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value); }
-export function getLocalPreviewUrls(address: string) { return { http: `http://${address}:3000`, https: `https://${address}:3443` }; }
+export function getLocalPreviewUrls(address: string, port = 3000) { return { http: `http://${address}:${port}`, https: `https://${address}:3443` }; }
 export function getLocalCertificateUrl(address: string) { return `http://${address}:3000/dreamie-local-ca.crt`; }
 export function getListenPort(environment: Record<string, string | undefined>): number {
   const configuredPort = environment.PORT;
@@ -150,9 +150,9 @@ export function getListenPort(environment: Record<string, string | undefined>): 
 }
 if (process.argv[1]?.endsWith('web-server.ts')) {
   const { server, httpsServer } = createDreamieWebServer();
-  const urls = getLocalPreviewUrls(lanIp());
   const port = getListenPort(process.env);
+  const urls = getLocalPreviewUrls(lanIp(), port);
   server.listen(port, '0.0.0.0');
   if (!process.env.PORT) httpsServer?.listen(3443, '0.0.0.0');
-  console.log(`Dreamie 已启动：\nhttp://127.0.0.1:3000\n${urls.http}${httpsServer ? `\n${urls.https}` : '\n提示：尚未找到本地 HTTPS 证书。'}`);
+  console.log(`Dreamie 已启动：\nhttp://127.0.0.1:${port}\n${urls.http}${httpsServer && !process.env.PORT ? `\n${urls.https}` : '\n提示：尚未找到本地 HTTPS 证书。'}`);
 }
