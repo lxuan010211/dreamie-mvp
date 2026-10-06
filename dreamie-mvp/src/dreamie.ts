@@ -1,5 +1,7 @@
-import { Agent } from '@openai/agents';
+import { Agent, type Tool } from '@openai/agents';
 import { z } from 'zod';
+
+import { createDreamieTools, type DreamieToolContext, type DreamieToolEffects } from './dreamie-tools.js';
 
 const optionalText = () => z.preprocess(
   (value) => typeof value === 'string' && value.trim() === '' ? undefined : value == null ? undefined : value,
@@ -28,7 +30,9 @@ You are Dreamie, a gentle bedtime companion. The user is preparing for sleep. Yo
 
 Infer the user's immediate sleep-related state. First respond with one warm, low-stimulation sentence. Then create one spoken sleep script, 80 to 240 Chinese characters, that can be read aloud slowly. It must be gentle, simple, and free of Markdown, lists, medical claims, frightening content, or pressure to fall asleep.
 
-Reply in Simplified Chinese and return only valid JSON with this exact shape:
+Use tools only when they genuinely help: ordinary conversation needs no tool; when the user explicitly asks for background sound, call recommend_background_audio before suggesting playback; for a story or meditation, call generate_tts; when the user explicitly says they like or dislike something, call save_sleep_memory. Never claim background audio is playing unless request_background_playback reports it is ready, and never bypass a pending confirmation.
+
+Reply in Simplified Chinese and return only valid JSON with this exact shape after any needed tool calls:
 {
   "reply": "a warm, calming sentence of at most 80 Chinese characters",
   "contentType": "breathing | white_noise | sleep_story | meditation",
@@ -42,13 +46,51 @@ Reply in Simplified Chinese and return only valid JSON with this exact shape:
 }
 `;
 
-export function createDreamieAgent(model: string) {
-  return new Agent({
+export const dreamieMaxTurns = 4;
+
+export interface DreamieRunnerOptions {
+  context: DreamieToolContext;
+  maxTurns: typeof dreamieMaxTurns;
+}
+
+export interface DreamieAgentRunInput {
+  model: string;
+  prompt: string;
+  context: DreamieToolContext;
+  tools?: Tool<DreamieToolContext>[];
+  run(
+    agent: Agent<DreamieToolContext>,
+    prompt: string,
+    options: DreamieRunnerOptions,
+  ): Promise<{ finalOutput?: string | null }>;
+}
+
+export interface DreamieAgentRunResult {
+  plan: SleepPlan;
+  effects: DreamieToolEffects;
+}
+
+export function createDreamieAgent(
+  model: string,
+  tools: Tool<DreamieToolContext>[] = createDreamieTools(),
+) {
+  return new Agent<DreamieToolContext>({
     name: 'Dreamie',
     model,
     instructions,
     modelSettings: { temperature: 0.4 },
+    tools,
   });
+}
+
+export async function runDreamieAgent(input: DreamieAgentRunInput): Promise<DreamieAgentRunResult> {
+  const result = await input.run(
+    createDreamieAgent(input.model, input.tools),
+    input.prompt,
+    { context: input.context, maxTurns: dreamieMaxTurns },
+  );
+  if (!result.finalOutput) throw new Error('Dreamie 暂时没有回应。');
+  return { plan: parseSleepPlan(result.finalOutput), effects: input.context.effects };
 }
 
 export function parseSleepPlan(output: string): SleepPlan {

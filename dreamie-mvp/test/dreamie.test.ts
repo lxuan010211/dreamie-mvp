@@ -55,6 +55,18 @@ test('builds Dreamie with the configured DeepSeek model', () => {
   assert.equal(agent.model, 'example-model');
 });
 
+test('gives Dreamie only the four approved service tools', () => {
+  const agent = createDreamieAgent('example-model');
+
+  assert.deepEqual(agent.tools.map((tool) => tool.name).sort(), [
+    'generate_tts',
+    'recommend_background_audio',
+    'request_background_playback',
+    'save_sleep_memory',
+  ]);
+  assert.ok(agent.tools.every((tool) => tool.type === 'function'));
+});
+
 test('parses a model response into a sleep plan', () => {
   const plan = parseSleepPlan(
     '{"reply":"我们先慢慢呼吸一会儿。","contentType":"breathing","durationMinutes":10,"mood":"overthinking","audioScript":"现在不用急着入睡。跟着我慢慢呼吸，吸气时感受空气进入身体，呼气时让肩膀轻轻放松下来。"}',
