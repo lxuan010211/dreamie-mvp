@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { getListenPort, getLocalCertificateUrl, getLocalPreviewUrls, createDreamieWebServer } from '../src/web-server.js';
+import { buildWebAudioResponse, getListenPort, getLocalCertificateUrl, getLocalPreviewUrls, createDreamieWebServer } from '../src/web-server.js';
 
 test('lists both HTTP and local HTTPS preview addresses', () => {
   assert.deepEqual(getLocalPreviewUrls('10.194.246.209'), {
@@ -19,6 +19,50 @@ test('uses a CloudBase port when provided and rejects invalid ports', () => {
   assert.equal(getListenPort({ PORT: '8080' }), 8080);
   assert.throws(() => getListenPort({ PORT: 'not-a-port' }), /PORT/);
   assert.throws(() => getListenPort({ PORT: '70000' }), /PORT/);
+});
+
+test('serializes a voice-only response without a background layer', () => {
+  const result = buildWebAudioResponse({
+    sessionId: 'session',
+    reply: '慢慢呼吸就好。',
+    audioMode: 'voice',
+    autoplay: true,
+  }, 'data:audio/mpeg;base64,AAE=');
+
+  assert.deepEqual(result.tts, { dataUrl: 'data:audio/mpeg;base64,AAE=' });
+  assert.equal(result.background, undefined);
+  assert.equal(result.reply, '慢慢呼吸就好。');
+});
+
+test('serializes a mixed response with safe background metadata', () => {
+  const result = buildWebAudioResponse({
+    sessionId: 'session',
+    reply: '听一段小故事吧。',
+    audioMode: 'voice_with_background',
+    backgroundTrackId: 'spring-rain',
+    autoplay: false,
+    audio: { trackId: 'spring-rain', title: '春日淅沥沥的小雨声', url: '/api/audio/spring-rain', state: 'pending' },
+  }, 'data:audio/mpeg;base64,AAE=');
+
+  assert.deepEqual(result.background, {
+    trackId: 'spring-rain',
+    title: '春日淅沥沥的小雨声',
+    url: '/api/audio/spring-rain',
+    autoplay: false,
+  });
+});
+
+test('keeps text when TTS synthesis fails', () => {
+  const result = buildWebAudioResponse({
+    sessionId: 'session',
+    reply: '文字仍然可以阅读。',
+    audioMode: 'voice',
+    autoplay: true,
+  }, undefined, '语音暂时不可用，但文字回复仍然有效。');
+
+  assert.equal(result.reply, '文字仍然可以阅读。');
+  assert.equal(result.tts, undefined);
+  assert.equal(result.ttsError, '语音暂时不可用，但文字回复仍然有效。');
 });
 
 test('rejects a missing or malformed anonymous browser ID before chat handling', async (t) => {

@@ -12,13 +12,41 @@ import { createDashScopeAsr } from './dashscope-asr.js';
 import { createDreamieAgent, parseSleepPlan } from './dreamie.js';
 import { createMemoryStoreFactory } from './memory-store-factory.js';
 import { synthesizeMiniMaxSpeech } from './minimax-tts.js';
-import { createWebSessionService } from './web-session.js';
+import { createWebSessionService, type WebChatResponse } from './web-session.js';
 
 dotenv.config({ path: '.env.local', quiet: true });
 
 const root = resolve(process.cwd(), '..');
 const localHttpsDirectory = resolve(process.cwd(), '.local-https');
 const staticFiles = new Map([['/', 'index.html'], ['/index.html', 'index.html'], ['/app.js', 'app.js'], ['/styles.css', 'styles.css']]);
+
+export type WebAudioResponse = WebChatResponse & {
+  tts?: { dataUrl: string };
+  background?: { trackId: string; title: string; url: string; autoplay: boolean };
+  ttsError?: string;
+};
+
+export function buildWebAudioResponse(
+  result: WebChatResponse,
+  ttsDataUrl?: string,
+  ttsError?: string,
+): WebAudioResponse {
+  return {
+    ...result,
+    ...(ttsDataUrl ? { tts: { dataUrl: ttsDataUrl } } : {}),
+    ...(ttsError ? { ttsError } : {}),
+    ...(result.audio
+      ? {
+          background: {
+            trackId: result.backgroundTrackId ?? result.audio.trackId,
+            title: result.audio.title,
+            url: result.audio.url,
+            autoplay: result.autoplay,
+          },
+        }
+      : {}),
+  };
+}
 
 export function createDreamieWebServer() {
   const config = loadConfig(process.env);
@@ -45,9 +73,9 @@ export function createDreamieWebServer() {
         const result = await sessions.handleMessage({ userId: input.userId, sessionId: input.sessionId, message: input.message });
         try {
           const dataUrl = await synthesizeMiniMaxSpeech(result.reply, ttsConfig);
-          return json(response, 200, { ...result, tts: { dataUrl } });
+          return json(response, 200, buildWebAudioResponse(result, dataUrl));
         } catch {
-          return json(response, 200, { ...result, ttsError: '语音暂时不可用，但文字回复仍然有效。' });
+          return json(response, 200, buildWebAudioResponse(result, undefined, '语音暂时不可用，但文字回复仍然有效。'));
         }
       }
       if (request.method === 'POST' && url.pathname === '/api/transcribe') {
