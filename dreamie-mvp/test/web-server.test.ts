@@ -75,6 +75,19 @@ test('keeps text when TTS synthesis fails', () => {
   assert.equal(result.ttsError, '语音暂时不可用，但文字回复仍然有效。');
 });
 
+test('serializes a tool-generated TTS artifact without leaking its private field', () => {
+  const result = buildWebAudioResponse({
+    sessionId: 'session',
+    reply: '慢慢呼吸就好。',
+    audioMode: 'voice',
+    autoplay: true,
+    ttsDataUrl: 'data:audio/mpeg;base64,AAE=',
+  });
+
+  assert.deepEqual(result.tts, { dataUrl: 'data:audio/mpeg;base64,AAE=' });
+  assert.equal('ttsDataUrl' in result, false);
+});
+
 test('rejects a missing or malformed anonymous browser ID before chat handling', async (t) => {
   const restore = configureTestEnvironment();
   t.after(restore);

@@ -7,6 +7,7 @@ import test from 'node:test';
 import { openMemoryStore } from '../src/memory-store.js';
 import { createMemoryStoreFactory } from '../src/memory-store-factory.js';
 import { createWebSessionService } from '../src/web-session.js';
+import type { DreamieToolEffects } from '../src/dreamie-tools.js';
 
 const voicePlan = { reply: '辛苦了，慢慢放松就好。', contentType: 'white_noise' as const, durationMinutes: 30, mood: 'tired' as const, audioScript: '现在让身体慢慢放松下来。', audioMode: 'voice' as const, autoplay: true };
 const backgroundPlan = { ...voicePlan, audioMode: 'background' as const, backgroundTrackId: 'spring-rain' };
@@ -16,12 +17,16 @@ type TestPlan = typeof voicePlan | typeof backgroundPlan | typeof unsolicitedMix
 const firstUserId = '11111111-1111-4111-8111-111111111111';
 const secondUserId = '22222222-2222-4222-8222-222222222222';
 
-function createService(t: test.TestContext, plan: TestPlan = voicePlan) {
+function createService(
+  t: test.TestContext,
+  plan: TestPlan = voicePlan,
+  effects?: DreamieToolEffects,
+) {
   const directory = mkdtempSync(join(tmpdir(), 'dreamie-web-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   return createWebSessionService({
     memoryStores: createMemoryStoreFactory({ kind: 'sqlite', databasePath: join(directory, 'dreamie.db') }),
-    getSleepPlan: async () => plan,
+    getSleepPlan: async () => effects ? { plan, effects } : plan,
   });
 }
 
@@ -99,4 +104,44 @@ test('does not attach a copied session ID to another anonymous user', async (t) 
 
   assert.notEqual(second.sessionId, first.sessionId);
   assert.deepEqual(service.getEventTypes(first.sessionId, secondUserId), []);
+});
+
+test('uses an agent-selected safe track for an explicit ambience request, then waits for consent', async (t) => {
+  const service = createService(t, voicePlan, {
+    recommendedTrack: { id: 'spring-rain', title: '春日淅沥沥的小雨声', kind: 'rain' },
+    playback: { trackId: 'spring-rain', status: 'pending_confirmation' },
+  });
+
+  const first = await service.handleMessage({ userId: firstUserId, message: '我想听一点雨声' });
+  const second = await service.handleMessage({ userId: firstUserId, sessionId: first.sessionId, message: '好，播放吧' });
+
+  assert.equal(first.audio?.trackId, 'spring-rain');
+  assert.equal(first.audio?.state, 'pending');
+  assert.equal(first.autoplay, false);
+  assert.equal(second.audio?.trackId, 'spring-rain');
+  assert.equal(second.audio?.state, 'playing');
+  assert.equal(second.autoplay, true);
+});
+
+test('does not attach a tool-selected background track to ordinary chat', async (t) => {
+  const service = createService(t, voicePlan, {
+    recommendedTrack: { id: 'spring-rain', title: '春日淅沥沥的小雨声', kind: 'rain' },
+    playback: { trackId: 'spring-rain', status: 'playing' },
+  });
+
+  const response = await service.handleMessage({ userId: firstUserId, message: '陪我慢慢聊一下今天的心情' });
+
+  assert.equal(response.audio, undefined);
+  assert.equal(response.autoplay, true);
+});
+
+test('keeps a tool-generated TTS artifact private until the HTTP layer serializes it', async (t) => {
+  const service = createService(t, voicePlan, {
+    ttsDataUrl: 'data:audio/mpeg;base64,AAE=',
+  });
+
+  const response = await service.handleMessage({ userId: firstUserId, message: '带我做一段呼吸引导' });
+
+  assert.equal(response.ttsDataUrl, 'data:audio/mpeg;base64,AAE=');
+  assert.equal(response.ttsError, undefined);
 });

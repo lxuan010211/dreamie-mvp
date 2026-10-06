@@ -14,7 +14,8 @@ import {
   requestsNarrationWithBackground,
   shouldSoftRecommendBackgroundAudio,
 } from './background-audio-session.js';
-import type { SleepPlan } from './dreamie.js';
+import type { DreamieAgentRunResult, SleepPlan } from './dreamie.js';
+import type { DreamieToolContext, DreamieToolEffects } from './dreamie-tools.js';
 import type { MemoryStoreFactory } from './memory-store-factory.js';
 import { applyListeningFeedbackAsync } from './memory-policy.js';
 import type { AsyncMemoryStore } from './postgres-memory-store.js';
@@ -31,6 +32,10 @@ export interface WebChatResponse {
   backgroundTrackId?: string;
   recommendation?: string;
   autoplay: boolean;
+  /** Server-only: removed by buildWebAudioResponse before JSON serialization. */
+  ttsDataUrl?: string;
+  /** Server-only: surfaced by buildWebAudioResponse as a safe browser message. */
+  ttsError?: string;
   audio?: {
     trackId: string;
     title: string;
@@ -38,6 +43,23 @@ export interface WebChatResponse {
     state: 'pending' | 'playing';
   };
 }
+
+export interface WebToolContextInput {
+  userId: string;
+  sessionId: string;
+  mood: SleepPlan['mood'];
+  preferredKinds: DreamieToolContext['preferredKinds'];
+  excludedTrackIds: string[];
+  playbackAllowed: boolean;
+  saveMemory: DreamieToolContext['saveMemory'];
+}
+
+export interface WebSleepPlanRequest {
+  prompt: string;
+  context?: DreamieToolContext;
+}
+
+type WebSleepPlanResult = SleepPlan | DreamieAgentRunResult;
 
 export interface WebSessionService {
   handleMessage(input: {
@@ -64,7 +86,8 @@ interface WebSession {
 
 export function createWebSessionService(dependencies: {
   memoryStores: MemoryStoreFactory;
-  getSleepPlan(prompt: string): Promise<SleepPlan>;
+  getSleepPlan(request: WebSleepPlanRequest): Promise<WebSleepPlanResult>;
+  createToolContext?(input: WebToolContextInput): DreamieToolContext;
 }): WebSessionService {
   const sessions = new Map<string, WebSession>();
 
@@ -109,6 +132,7 @@ export function createWebSessionService(dependencies: {
     reply: string,
     state: 'pending' | 'playing',
     audioPlan?: Partial<Pick<SleepPlan, 'audioScript' | 'audioMode' | 'backgroundTrackId' | 'recommendation' | 'autoplay'>>,
+    effects?: DreamieToolEffects,
   ): WebChatResponse {
     return {
       sessionId: session.id,
@@ -118,6 +142,8 @@ export function createWebSessionService(dependencies: {
       backgroundTrackId: audioPlan?.backgroundTrackId,
       recommendation: audioPlan?.recommendation,
       autoplay: audioPlan?.autoplay ?? true,
+      ttsDataUrl: audioPlan?.audioMode === 'background' ? undefined : effects?.ttsDataUrl,
+      ttsError: effects?.toolErrors?.find((message) => message.includes('语音')),
       audio: session.track
         ? {
             trackId: session.track.id,
@@ -127,6 +153,26 @@ export function createWebSessionService(dependencies: {
           }
         : undefined,
     };
+  }
+
+  function getPlanAndEffects(result: WebSleepPlanResult): { plan: SleepPlan; effects: DreamieToolEffects } {
+    if ('plan' in result) return { plan: result.plan, effects: result.effects };
+    return { plan: result, effects: {} };
+  }
+
+  function createToolContext(session: WebSession): DreamieToolContext | undefined {
+    return dependencies.createToolContext?.({
+      userId: session.userId,
+      sessionId: session.id,
+      mood: session.mood,
+      preferredKinds: [...session.memory.preferredKinds],
+      excludedTrackIds: [...session.memory.excludedTrackIds, ...session.excluded],
+      playbackAllowed: false,
+      saveMemory: async (feedback) => {
+        if (feedback.target !== 'background' || !session.track) return;
+        await record(session, session.track, feedback.event);
+      },
+    });
   }
 
   return {
@@ -176,9 +222,11 @@ export function createWebSessionService(dependencies: {
       }
 
       session.dialogue = addUserMessage(session.dialogue, input.message);
-      const plan = await dependencies.getSleepPlan(
-        `${getConversationPrompt(session.dialogue)}\n${session.memory.modelSummary}`,
-      );
+      const run = await dependencies.getSleepPlan({
+        prompt: `${getConversationPrompt(session.dialogue)}\n${session.memory.modelSummary}`,
+        context: createToolContext(session),
+      });
+      const { plan, effects } = getPlanAndEffects(run);
       session.dialogue = addAssistantMessage(session.dialogue, plan.reply);
       session.mood = plan.mood;
       const explicitBackground = requestsBackgroundAudio(input.message);
@@ -192,7 +240,8 @@ export function createWebSessionService(dependencies: {
         input.message,
       );
       if (shouldAttachAudio || shouldSuggest) {
-        session.track = (plan.backgroundTrackId ? findSleepAudioById(plan.backgroundTrackId) : undefined)
+        session.track = (effects.recommendedTrack ? findSleepAudioById(effects.recommendedTrack.id) : undefined)
+          ?? (plan.backgroundTrackId ? findSleepAudioById(plan.backgroundTrackId) : undefined)
           ?? recommendBackgroundAudio(
             plan.mood,
             [...session.memory.excludedTrackIds, ...session.excluded],
@@ -206,7 +255,7 @@ export function createWebSessionService(dependencies: {
       const responsePlan = shouldSuggest
         ? { ...plan, audioMode: 'voice' as const, backgroundTrackId: session.track?.id, recommendation: plan.recommendation ?? getBackgroundRecommendationText(session.track!), autoplay: false }
         : shouldAttachAudio
-          ? { ...plan, audioMode: requestsNarrationWithBackground(input.message) ? 'voice_with_background' as const : 'background' as const, backgroundTrackId: session.track?.id, autoplay: requestsNarrationWithBackground(input.message) ? plan.autoplay : false }
+          ? { ...plan, audioMode: requestsNarrationWithBackground(input.message) ? 'voice_with_background' as const : 'background' as const, backgroundTrackId: session.track?.id, autoplay: false }
           : { ...plan, audioMode: 'voice' as const, backgroundTrackId: undefined, recommendation: undefined };
       const responseText = shouldSuggest || shouldAttachAudio
         ? `${plan.reply}\n${getBackgroundRecommendationText(session.track!)}`
@@ -216,6 +265,7 @@ export function createWebSessionService(dependencies: {
         responseText,
         'pending',
         responsePlan,
+        effects,
       );
     },
 

@@ -9,7 +9,8 @@ import { OpenAIProvider, Runner, setTracingDisabled } from '@openai/agents';
 import { findSleepAudioById } from './audio-catalog.js';
 import { loadConfig, loadDashScopeAsrConfig, loadMemoryStoreConfig, loadMiniMaxTtsConfig } from './config.js';
 import { createDashScopeAsr } from './dashscope-asr.js';
-import { createDreamieAgent, parseSleepPlan } from './dreamie.js';
+import { createDreamieAgent, parseSleepPlan, runDreamieAgent } from './dreamie.js';
+import { createDreamieToolContext } from './dreamie-tools.js';
 import { createMemoryStoreFactory } from './memory-store-factory.js';
 import { synthesizeMiniMaxSpeech } from './minimax-tts.js';
 import { createWebSessionService, type WebChatResponse } from './web-session.js';
@@ -20,7 +21,7 @@ const root = resolve(process.cwd(), '..');
 const localHttpsDirectory = resolve(process.cwd(), '.local-https');
 const staticFiles = new Map([['/', 'index.html'], ['/index.html', 'index.html'], ['/app.js', 'app.js'], ['/audio-player.js', 'audio-player.js'], ['/styles.css', 'styles.css']]);
 
-export type WebAudioResponse = WebChatResponse & {
+export type WebAudioResponse = Omit<WebChatResponse, 'ttsDataUrl' | 'ttsError'> & {
   tts?: { dataUrl: string };
   background?: { trackId: string; title: string; url: string; autoplay: boolean };
   ttsError?: string;
@@ -31,17 +32,20 @@ export function buildWebAudioResponse(
   ttsDataUrl?: string,
   ttsError?: string,
 ): WebAudioResponse {
+  const { ttsDataUrl: privateTtsDataUrl, ttsError: privateTtsError, ...response } = result;
+  const resolvedTtsDataUrl = ttsDataUrl ?? privateTtsDataUrl;
+  const resolvedTtsError = ttsError ?? privateTtsError;
   return {
-    ...result,
-    ...(ttsDataUrl ? { tts: { dataUrl: ttsDataUrl } } : {}),
-    ...(ttsError ? { ttsError } : {}),
-    ...(result.audio
+    ...response,
+    ...(resolvedTtsDataUrl ? { tts: { dataUrl: resolvedTtsDataUrl } } : {}),
+    ...(resolvedTtsError ? { ttsError: resolvedTtsError } : {}),
+    ...(response.audio
       ? {
           background: {
-            trackId: result.backgroundTrackId ?? result.audio.trackId,
-            title: result.audio.title,
-            url: result.audio.url,
-            autoplay: result.autoplay,
+            trackId: response.backgroundTrackId ?? response.audio.trackId,
+            title: response.audio.title,
+            url: response.audio.url,
+            autoplay: response.autoplay,
           },
         }
       : {}),
@@ -66,11 +70,31 @@ export function createDreamieWebServer() {
   const provider = new OpenAIProvider({ apiKey: config.apiKey, baseURL: config.baseURL, useResponses: false, strictFeatureValidation: true });
   const runner = new Runner({ modelProvider: provider });
   const memoryStores = createMemoryStoreFactory(loadMemoryStoreConfig(process.env));
-  const sessions = createWebSessionService({ memoryStores, getSleepPlan: async (prompt) => {
-    const result = await runner.run(createDreamieAgent(config.model), prompt, { maxTurns: 1 });
+  const getFallbackSleepPlan = async (prompt: string) => {
+    const result = await runner.run(createDreamieAgent(config.model, []), prompt, { maxTurns: 1 });
     if (!result.finalOutput) throw new Error('Dreamie 暂时没有回应。');
     return parseSleepPlan(result.finalOutput);
-  } });
+  };
+  const sessions = createWebSessionService({
+    memoryStores,
+    createToolContext: (input) => createDreamieToolContext({ ...input, ttsConfig }),
+    getSleepPlan: async ({ prompt, context }) => {
+      if (!context) return getFallbackSleepPlan(prompt);
+      try {
+        return await runDreamieAgent({
+          model: config.model,
+          prompt,
+          context,
+          run: async (agent, agentPrompt, options) => {
+            const result = await runner.run(agent, agentPrompt, options);
+            return { finalOutput: typeof result.finalOutput === 'string' ? result.finalOutput : null };
+          },
+        });
+      } catch {
+        return getFallbackSleepPlan(prompt);
+      }
+    },
+  });
   const handler = async (request: import('node:http').IncomingMessage, response: import('node:http').ServerResponse) => {
     try {
       const url = new URL(request.url ?? '/', 'http://localhost');
@@ -82,10 +106,10 @@ export function createDreamieWebServer() {
         const result = await sessions.handleMessage({ userId: input.userId, sessionId: input.sessionId, message: input.message });
         try {
           if (result.audioMode === 'background') return json(response, 200, buildWebAudioResponse(result));
-          const dataUrl = await synthesizeMiniMaxSpeech(getSpeechText(result), ttsConfig);
+          const dataUrl = result.ttsDataUrl ?? await synthesizeMiniMaxSpeech(getSpeechText(result), ttsConfig);
           return json(response, 200, buildWebAudioResponse(result, dataUrl));
         } catch {
-          return json(response, 200, buildWebAudioResponse(result, undefined, '语音暂时不可用，但文字回复仍然有效。'));
+          return json(response, 200, buildWebAudioResponse(result, undefined, result.ttsError ?? '语音暂时不可用，但文字回复仍然有效。'));
         }
       }
       if (request.method === 'POST' && url.pathname === '/api/transcribe') {
