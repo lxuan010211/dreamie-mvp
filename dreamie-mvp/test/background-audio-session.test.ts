@@ -7,7 +7,9 @@ import {
   createBackgroundAudioSession,
   getBackgroundAudioAction,
   getConversationPrompt,
+  markRecommendationDeclined,
   recommendBackgroundAudio,
+  shouldSoftRecommendBackgroundAudio,
 } from '../src/background-audio-session.js';
 
 test('keeps recent dialogue when preparing the next model prompt', () => {
@@ -47,4 +49,18 @@ test('prefers rain when it matches the user memory and current mood', () => {
 test('recognizes explicit like and dislike feedback', () => {
   assert.equal(getBackgroundAudioAction('喜欢'), 'like');
   assert.equal(getBackgroundAudioAction('不要再推荐'), 'dislike');
+});
+
+test('softly recommends only when the mood and memory preference match', () => {
+  assert.equal(shouldSoftRecommendBackgroundAudio('overthinking', ['rain'], false, '今天脑子停不下来'), true);
+  assert.equal(shouldSoftRecommendBackgroundAudio('calm', ['rain'], false, '今晚想聊聊天'), false);
+  assert.equal(shouldSoftRecommendBackgroundAudio('overthinking', [], false, '今天脑子停不下来'), false);
+  assert.equal(shouldSoftRecommendBackgroundAudio('overthinking', ['rain'], true, '今天脑子停不下来'), false);
+});
+
+test('marks a recommendation as declined for the current session', () => {
+  let session = createBackgroundAudioSession();
+  assert.equal(session.recommendationCooldown, false);
+  session = markRecommendationDeclined(session);
+  assert.equal(session.recommendationCooldown, true);
 });

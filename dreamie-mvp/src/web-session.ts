@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { SleepAudioTrack } from './audio-catalog.js';
+import { findSleepAudioById, type SleepAudioTrack } from './audio-catalog.js';
 import {
   addAssistantMessage,
   addUserMessage,
@@ -8,7 +8,10 @@ import {
   getBackgroundAudioAction,
   getBackgroundRecommendationText,
   getConversationPrompt,
+  markRecommendationDeclined,
   recommendBackgroundAudio,
+  requestsBackgroundAudio,
+  shouldSoftRecommendBackgroundAudio,
 } from './background-audio-session.js';
 import type { SleepPlan } from './dreamie.js';
 import type { MemoryStoreFactory } from './memory-store-factory.js';
@@ -54,6 +57,7 @@ interface WebSession {
   track?: SleepAudioTrack;
   mood: SleepPlan['mood'];
   eventTypes: string[];
+  recommendationShown: boolean;
 }
 
 export function createWebSessionService(dependencies: {
@@ -78,6 +82,7 @@ export function createWebSessionService(dependencies: {
       excluded: [],
       mood: 'unknown',
       eventTypes: [],
+      recommendationShown: false,
     };
     sessions.set(sessionKey(userId, id), session);
     return session;
@@ -134,6 +139,14 @@ export function createWebSessionService(dependencies: {
       }
 
       if (session.track && (action === 'change' || action === 'dislike')) {
+        if (action === 'dislike') {
+          await record(session, session.track, 'disliked');
+          session.track = undefined;
+          session.dialogue = markRecommendationDeclined(
+            addAssistantMessage(session.dialogue, '好的，我记住了，今晚不再推荐背景音。'),
+          );
+          return responseFor(session, '好的，我记住了，今晚不再推荐背景音。', 'pending');
+        }
         await record(session, session.track, action === 'change' ? 'changed' : 'disliked');
         session.excluded.push(session.track.id);
         session.track = recommendBackgroundAudio(
@@ -160,17 +173,39 @@ export function createWebSessionService(dependencies: {
       );
       session.dialogue = addAssistantMessage(session.dialogue, plan.reply);
       session.mood = plan.mood;
-      session.track = recommendBackgroundAudio(
+      const explicitBackground = requestsBackgroundAudio(input.message);
+      const shouldAttachAudio = explicitBackground || plan.audioMode !== 'voice';
+      const shouldSuggest = !shouldAttachAudio && !session.dialogue.recommendationCooldown && shouldSoftRecommendBackgroundAudio(
         plan.mood,
-        [...session.memory.excludedTrackIds, ...session.excluded],
         session.memory.preferredKinds,
+        session.recommendationShown,
+        input.message,
       );
-      await record(session, session.track, 'recommended');
+      if (shouldAttachAudio || shouldSuggest) {
+        session.track = (plan.backgroundTrackId ? findSleepAudioById(plan.backgroundTrackId) : undefined)
+          ?? recommendBackgroundAudio(
+            plan.mood,
+            [...session.memory.excludedTrackIds, ...session.excluded],
+            session.memory.preferredKinds,
+          );
+        await record(session, session.track, 'recommended');
+        session.recommendationShown = true;
+      } else {
+        session.track = undefined;
+      }
+      const responsePlan = shouldSuggest
+        ? { ...plan, audioMode: 'background' as const, backgroundTrackId: session.track?.id, recommendation: plan.recommendation ?? getBackgroundRecommendationText(session.track!), autoplay: false }
+        : shouldAttachAudio
+          ? { ...plan, backgroundTrackId: session.track?.id }
+          : plan;
+      const responseText = shouldSuggest || shouldAttachAudio
+        ? `${plan.reply}\n${getBackgroundRecommendationText(session.track!)}`
+        : plan.reply;
       return responseFor(
         session,
-        `${plan.reply}\n${getBackgroundRecommendationText(session.track)}`,
+        responseText,
         'pending',
-        plan,
+        responsePlan,
       );
     },
 

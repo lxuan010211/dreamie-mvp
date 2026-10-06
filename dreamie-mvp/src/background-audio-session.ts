@@ -7,6 +7,7 @@ export interface ConversationTurn {
 
 export interface BackgroundAudioSession {
   turns: readonly ConversationTurn[];
+  recommendationCooldown: boolean;
 }
 
 export type BackgroundAudioAction = 'play' | 'change' | 'like' | 'dislike' | 'continue';
@@ -14,7 +15,7 @@ export type BackgroundAudioAction = 'play' | 'change' | 'like' | 'dislike' | 'co
 const maxStoredTurns = 6;
 
 export function createBackgroundAudioSession(): BackgroundAudioSession {
-  return { turns: [] };
+  return { turns: [], recommendationCooldown: false };
 }
 
 export function addUserMessage(session: BackgroundAudioSession, content: string): BackgroundAudioSession {
@@ -31,7 +32,26 @@ function addTurn(
   content: string,
 ): BackgroundAudioSession {
   const turns = [...session.turns, { role, content: content.trim() }].filter((turn) => turn.content.length > 0);
-  return { turns: turns.slice(-maxStoredTurns) };
+  return { ...session, turns: turns.slice(-maxStoredTurns) };
+}
+
+export function markRecommendationDeclined(session: BackgroundAudioSession): BackgroundAudioSession {
+  return { ...session, recommendationCooldown: true };
+}
+
+export function shouldSoftRecommendBackgroundAudio(
+  mood: SleepMood | 'unknown',
+  preferredKinds: readonly SleepAudioTrack['kind'][],
+  alreadySuggested: boolean,
+  userMessage: string,
+): boolean {
+  if (alreadySuggested || preferredKinds.length === 0) return false;
+  if (!['overthinking', 'tired', 'stressed', 'restless'].includes(mood)) return false;
+  return /(累|疲惫|压力|焦虑|停不下来|睡不着|失眠|烦)/.test(userMessage);
+}
+
+export function requestsBackgroundAudio(input: string): boolean {
+  return /(雨声|白噪音|海浪|海风|壁炉|背景音|背景音乐)/.test(input);
 }
 
 export function getConversationPrompt(session: BackgroundAudioSession): string {
