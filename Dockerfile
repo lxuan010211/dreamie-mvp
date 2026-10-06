@@ -6,5 +6,6 @@ COPY dreamie-mvp ./dreamie-mvp
 WORKDIR /app/dreamie-mvp
 RUN corepack enable && pnpm install --frozen-lockfile
 ENV NODE_ENV=production
+ENV PORT=8080
 EXPOSE 8080
 CMD ["node", "node_modules/tsx/dist/cli.mjs", "src/web-server.ts"]
