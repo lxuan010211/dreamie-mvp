@@ -1,0 +1,93 @@
+import { listDefaultSleepAudio, type SleepAudioTrack, type SleepMood } from './audio-catalog.js';
+
+export interface ConversationTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface BackgroundAudioSession {
+  turns: readonly ConversationTurn[];
+}
+
+export type BackgroundAudioAction = 'play' | 'change' | 'like' | 'dislike' | 'continue';
+
+const maxStoredTurns = 6;
+
+export function createBackgroundAudioSession(): BackgroundAudioSession {
+  return { turns: [] };
+}
+
+export function addUserMessage(session: BackgroundAudioSession, content: string): BackgroundAudioSession {
+  return addTurn(session, 'user', content);
+}
+
+export function addAssistantMessage(session: BackgroundAudioSession, content: string): BackgroundAudioSession {
+  return addTurn(session, 'assistant', content);
+}
+
+function addTurn(
+  session: BackgroundAudioSession,
+  role: ConversationTurn['role'],
+  content: string,
+): BackgroundAudioSession {
+  const turns = [...session.turns, { role, content: content.trim() }].filter((turn) => turn.content.length > 0);
+  return { turns: turns.slice(-maxStoredTurns) };
+}
+
+export function getConversationPrompt(session: BackgroundAudioSession): string {
+  const dialogue = session.turns
+    .map((turn) => `${turn.role === 'user' ? '用户' : 'Dreamie'}：${turn.content}`)
+    .join('\n');
+
+  return `这是本轮睡前对话，请根据完整上下文判断用户当下状态：\n${dialogue}`;
+}
+
+export function recommendBackgroundAudio(
+  mood: SleepMood | 'unknown',
+  excludedTrackIds: readonly string[],
+  preferredKinds: readonly SleepAudioTrack['kind'][] = [],
+): SleepAudioTrack {
+  const tracks = listDefaultSleepAudio();
+  const availableTracks = tracks.filter((track) => !excludedTrackIds.includes(track.id));
+  const candidates = availableTracks.length > 0 ? availableTracks : tracks;
+
+  return [...candidates].sort((left, right) => {
+    const leftScore = recommendationScore(left, mood, preferredKinds);
+    const rightScore = recommendationScore(right, mood, preferredKinds);
+    return rightScore - leftScore;
+  })[0]!;
+}
+
+export function getBackgroundAudioAction(input: string): BackgroundAudioAction {
+  const normalized = input.trim().toLowerCase();
+
+  if (/^(好|好的|好啊|可以|可以的|播放|开始|行|嗯|yes|y)$/.test(normalized)) {
+    return 'play';
+  }
+
+  if (/(换一个|换首|换一段|换|其他|别的)/.test(normalized)) {
+    return 'change';
+  }
+
+  if (/^(喜欢|我喜欢)$/.test(normalized)) {
+    return 'like';
+  }
+
+  if (/(不喜欢|不要再推荐)/.test(normalized)) {
+    return 'dislike';
+  }
+
+  return 'continue';
+}
+
+function recommendationScore(
+  track: SleepAudioTrack,
+  mood: SleepMood | 'unknown',
+  preferredKinds: readonly SleepAudioTrack['kind'][],
+): number {
+  return Number(preferredKinds.includes(track.kind)) * 2 + Number(track.suitableMoods.includes(mood as SleepMood));
+}
+
+export function getBackgroundRecommendationText(track: SleepAudioTrack): string {
+  return `我推荐「${track.title}」，可以陪你放松大约 ${track.defaultDurationMinutes} 分钟。要播放吗？`;
+}
