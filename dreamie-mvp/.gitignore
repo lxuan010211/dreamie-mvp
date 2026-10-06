@@ -1,0 +1,6 @@
+node_modules/
+.env.local
+generated-audio/
+data/dreamie.db
+data/dreamie.db-shm
+data/dreamie.db-wal
