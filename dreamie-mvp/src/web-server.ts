@@ -7,10 +7,10 @@ import dotenv from 'dotenv';
 import { OpenAIProvider, Runner, setTracingDisabled } from '@openai/agents';
 
 import { findSleepAudioById } from './audio-catalog.js';
-import { loadConfig, loadDashScopeAsrConfig } from './config.js';
+import { loadConfig, loadDashScopeAsrConfig, loadMemoryStoreConfig } from './config.js';
 import { createDashScopeAsr } from './dashscope-asr.js';
 import { createDreamieAgent, parseSleepPlan } from './dreamie.js';
-import { openMemoryStoreOrNull } from './memory-store.js';
+import { createMemoryStoreFactory } from './memory-store-factory.js';
 import { createWebSessionService } from './web-session.js';
 
 dotenv.config({ path: '.env.local', quiet: true });
@@ -26,8 +26,8 @@ export function createDreamieWebServer() {
   setTracingDisabled(true);
   const provider = new OpenAIProvider({ apiKey: config.apiKey, baseURL: config.baseURL, useResponses: false, strictFeatureValidation: true });
   const runner = new Runner({ modelProvider: provider });
-  const memoryStore = openMemoryStoreOrNull(`${process.cwd()}/data/dreamie.db`, () => console.warn('提示：本次偏好未保存。'));
-  const sessions = createWebSessionService({ memoryStore, getSleepPlan: async (prompt) => {
+  const memoryStores = createMemoryStoreFactory(loadMemoryStoreConfig(process.env));
+  const sessions = createWebSessionService({ memoryStores, getSleepPlan: async (prompt) => {
     const result = await runner.run(createDreamieAgent(config.model), prompt, { maxTurns: 1 });
     if (!result.finalOutput) throw new Error('Dreamie 暂时没有回应。');
     return parseSleepPlan(result.finalOutput);
@@ -73,7 +73,17 @@ export function createDreamieWebServer() {
   const httpsServer = existsSync(keyPath) && existsSync(certificatePath)
     ? createHttpsServer({ key: readFileSync(keyPath), cert: readFileSync(certificatePath) }, handler)
     : undefined;
-  return { server, httpsServer, close: async () => { await provider.close(); } };
+  return {
+    server,
+    httpsServer,
+    close: async () => {
+      try {
+        await memoryStores.close();
+      } finally {
+        await provider.close();
+      }
+    },
+  };
 }
 
 function json(response: import('node:http').ServerResponse, status: number, value: unknown) { response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); response.end(JSON.stringify(value)); }
@@ -82,10 +92,20 @@ function lanIp() { for (const values of Object.values(networkInterfaces())) for 
 function isUuid(value: unknown): value is string { return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value); }
 export function getLocalPreviewUrls(address: string) { return { http: `http://${address}:3000`, https: `https://${address}:3443` }; }
 export function getLocalCertificateUrl(address: string) { return `http://${address}:3000/dreamie-local-ca.crt`; }
+export function getListenPort(environment: Record<string, string | undefined>): number {
+  const configuredPort = environment.PORT;
+  if (!configuredPort) return 3000;
+  if (!/^\d+$/.test(configuredPort)) throw new Error('PORT must be a valid TCP port');
+  const port = Number(configuredPort);
+  if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
+    throw new Error('PORT must be a valid TCP port');
+  }
+  return port;
+}
 if (process.argv[1]?.endsWith('web-server.ts')) {
   const { server, httpsServer } = createDreamieWebServer();
   const urls = getLocalPreviewUrls(lanIp());
-  const port = Number(process.env.PORT || 3000);
+  const port = getListenPort(process.env);
   server.listen(port, '0.0.0.0');
   if (!process.env.PORT) httpsServer?.listen(3443, '0.0.0.0');
   console.log(`Dreamie 已启动：\nhttp://127.0.0.1:3000\n${urls.http}${httpsServer ? `\n${urls.https}` : '\n提示：尚未找到本地 HTTPS 证书。'}`);
