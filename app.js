@@ -1,4 +1,14 @@
 import { createAudioPlaybackController } from './audio-player.js';
+import { readCompanionProfile, mountSettings } from './settings.js';
+import { mountWatchTogether } from './watch-together.js';
+
+export function updatePlaybackBubble(bubble, state, hasSentMessage = false) {
+  if (!bubble) return;
+  const playing = state === 'playing';
+  bubble.classList.toggle('is-playing', playing);
+  bubble.classList.toggle('is-visible', hasSentMessage || playing);
+  bubble.setAttribute('aria-label', playing ? 'Dreamie 正在播放音频' : 'Dreamie 音频未播放');
+}
 
 export function createChatState() {
   let draft = '';
@@ -101,6 +111,7 @@ export function mountChat(root = document) {
   const welcome = root.querySelector('[data-welcome]');
   const listenBubble = root.querySelector('[data-listen-bubble]');
   const listenLabel = root.querySelector('[data-listen-label]');
+  const playbackBubble = root.querySelector('[data-playback-bubble]');
 
   if (!composer || !sendButton || !messages || !status) return;
 
@@ -123,6 +134,8 @@ export function mountChat(root = document) {
     speechState = 'idle';
     render();
   };
+  void mountSettings(root, { stopChatAudio: stopSpeech });
+  mountWatchTogether(root, { stopChatAudio: stopSpeech });
 
   const playSpeech = async () => {
     if (!speechAvailable) return;
@@ -139,7 +152,7 @@ export function mountChat(root = document) {
     if (data.tts?.dataUrl) audioPlayer.loadVoice(data.tts.dataUrl, { mode: data.audioMode });
     if (data.background?.url) audioPlayer.loadBackground(data.background.url, { preserveVoice: Boolean(data.tts?.dataUrl), mode: data.audioMode });
     speechAvailable = Boolean(data.tts?.dataUrl || data.background?.url);
-    if (speechAvailable && data.autoplay !== false) void playSpeech();
+    if (speechAvailable && data.autoplay !== false && !root.querySelector('[data-chat-app]').hidden) void playSpeech();
     else render();
   };
 
@@ -178,6 +191,7 @@ export function mountChat(root = document) {
 
     status.textContent = snapshot.status;
     welcome?.classList.toggle('is-hidden', snapshot.hasStarted);
+    updatePlaybackBubble(playbackBubble, speechState, snapshot.messages.length > 0);
     updateComposer();
   };
 
@@ -190,7 +204,7 @@ export function mountChat(root = document) {
     chat.setStatus('Dreamie 正在想一想…');
     render();
     try {
-      const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, sessionId, message: text }) });
+      const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, sessionId, message: text, profile: readCompanionProfile() }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || '连接失败');
       sessionId = data.sessionId;

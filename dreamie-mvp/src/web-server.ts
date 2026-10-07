@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import { OpenAIProvider, Runner, setTracingDisabled } from '@openai/agents';
 
 import { findSleepAudioById } from './audio-catalog.js';
+import { companionProfileSchema, personas, voices } from './companion-profile.js';
 import { loadConfig, loadDashScopeAsrConfig, loadMemoryStoreConfig, loadMiniMaxTtsConfig } from './config.js';
 import { createDashScopeAsr } from './dashscope-asr.js';
 import { createDreamieAgent, parseSleepPlan, runDreamieAgent } from './dreamie.js';
@@ -53,6 +54,8 @@ export function buildWebAudioResponse(
 }
 
 export function getStaticFile(pathname: string): string | undefined {
+  if (pathname === '/watch-together.js') return 'watch-together.js';
+  if (pathname === '/settings.js') return 'settings.js';
   return staticFiles.get(pathname) ?? (pathname.startsWith('/assets/mascots/') ? pathname.slice(1) : undefined);
 }
 
@@ -63,7 +66,7 @@ export function getSpeechText(result: Pick<WebChatResponse, 'reply' | 'audioScri
 
 export function createDreamieWebServer() {
   const config = loadConfig(process.env);
-  const ttsConfig = loadMiniMaxTtsConfig(process.env);
+  const ttsConfig = { ...loadMiniMaxTtsConfig(process.env), speed: 0.9 };
   const asrConfig = loadDashScopeAsrConfig(process.env);
   const asr = createDashScopeAsr(asrConfig);
   setTracingDisabled(true);
@@ -77,7 +80,7 @@ export function createDreamieWebServer() {
   };
   const sessions = createWebSessionService({
     memoryStores,
-    createToolContext: (input) => createDreamieToolContext({ ...input, ttsConfig }),
+    createToolContext: (input) => createDreamieToolContext({ ...input, ttsConfig: { ...ttsConfig, voiceId: input.voiceId ?? ttsConfig.voiceId } }),
     getSleepPlan: async ({ prompt, context }) => {
       if (!context) return getFallbackSleepPlan(prompt);
       try {
@@ -98,15 +101,28 @@ export function createDreamieWebServer() {
   const handler = async (request: import('node:http').IncomingMessage, response: import('node:http').ServerResponse) => {
     try {
       const url = new URL(request.url ?? '/', 'http://localhost');
+      if (request.method === 'GET' && url.pathname === '/api/settings/options') {
+        return json(response, 200, { personas, voices });
+      }
+      if (request.method === 'POST' && url.pathname === '/api/voice-preview') {
+        const body = JSON.parse(await readJsonBody(request, 2000, '请求太长。'));
+        const parsed = companionProfileSchema.safeParse(body);
+        if (!parsed.success) return json(response, 400, { error: '请选择有效的音色。' });
+        const dataUrl = await synthesizeMiniMaxSpeech('你好，我是 Dreamie。今晚想聊些什么？慢慢说，我很想听听你的故事。', { ...ttsConfig, voiceId: parsed.data.voiceId });
+        return json(response, 200, { dataUrl });
+      }
       if (request.method === 'POST' && url.pathname === '/api/chat') {
         const body = await readJsonBody(request, 20_000, '消息太长。');
-        const input = JSON.parse(body) as { userId?: string; sessionId?: string; message?: string };
+        const input = JSON.parse(body) as { userId?: string; sessionId?: string; message?: string; profile?: unknown };
         if (typeof input.message !== 'string') return json(response, 400, { error: '请输入文字消息。' });
         if (!isUuid(input.userId)) return json(response, 400, { error: '浏览器身份无效，请刷新页面后重试。' });
-        const result = await sessions.handleMessage({ userId: input.userId, sessionId: input.sessionId, message: input.message });
+        const parsedProfile = input.profile === undefined ? undefined : companionProfileSchema.safeParse(input.profile);
+        if (parsedProfile && !parsedProfile.success) return json(response, 400, { error: '设置无效，请重新选择。' });
+        const profile = parsedProfile?.success ? parsedProfile.data : undefined;
+        const result = await sessions.handleMessage({ userId: input.userId, sessionId: input.sessionId, message: input.message, profile });
         try {
           if (result.audioMode === 'background') return json(response, 200, buildWebAudioResponse(result));
-          const dataUrl = result.ttsDataUrl ?? await synthesizeMiniMaxSpeech(getSpeechText(result), ttsConfig);
+          const dataUrl = result.ttsDataUrl ?? await synthesizeMiniMaxSpeech(getSpeechText(result), { ...ttsConfig, voiceId: profile?.voiceId ?? ttsConfig.voiceId });
           return json(response, 200, buildWebAudioResponse(result, dataUrl));
         } catch {
           return json(response, 200, buildWebAudioResponse(result, undefined, result.ttsError ?? '语音暂时不可用，但文字回复仍然有效。'));

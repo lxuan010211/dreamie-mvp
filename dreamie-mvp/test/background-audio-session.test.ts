@@ -59,6 +59,9 @@ test('recognizes affirmative ambience requests but ignores negative mentions', (
   assert.equal(requestsBackgroundAudio('请放一点雨声陪我'), true);
   assert.equal(requestsBackgroundAudio('我想听一点BGM'), true);
   assert.equal(requestsBackgroundAudio('不要背景音，只陪我聊聊天'), false);
+  assert.equal(requestsBackgroundAudio('我想一遍放音频一遍冥想放松'), true);
+  assert.equal(requestsBackgroundAudio('我想一边放音频一边冥想放松'), true);
+  assert.equal(requestsBackgroundAudio('不要放音频，只做冥想'), false);
 });
 
 test('softly recommends only when the mood and memory preference match', () => {

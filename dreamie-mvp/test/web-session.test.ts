@@ -19,7 +19,7 @@ const secondUserId = '22222222-2222-4222-8222-222222222222';
 
 function createService(
   t: test.TestContext,
-  plan: TestPlan = voicePlan,
+  plan: TestPlan & { backgroundRequested?: boolean; backgroundConfirmed?: boolean } = voicePlan,
   effects?: DreamieToolEffects,
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'dreamie-web-'));
@@ -89,6 +89,20 @@ test('keeps narration plus ambience as a mixed response', async (t) => {
   const response = await createService(t, backgroundPlan).handleMessage({ userId: firstUserId, message: '讲一个温柔的小故事，配一点雨声' });
   assert.equal(response.audioMode, 'voice_with_background');
   assert.equal(response.audioScript, voicePlan.audioScript);
+  assert.equal(response.autoplay, true);
+  assert.equal(response.audio?.state, 'playing');
+});
+
+test('starts meditation and background together for the users combined audio request', async (t) => {
+  const service = createService(t, voicePlan, { ttsDataUrl: 'data:audio/mpeg;base64,AAE=' });
+  const response = await service.handleMessage({ userId: firstUserId, message: '我想一遍放音频一遍冥想放松' });
+  assert.equal(response.audioMode, 'voice_with_background');
+  assert.equal(response.autoplay, true);
+  assert.ok(response.audio?.trackId);
+  assert.equal(response.audio?.state, 'playing');
+  assert.equal(response.ttsDataUrl, 'data:audio/mpeg;base64,AAE=');
+  assert.equal(response.audioScript, voicePlan.audioScript);
+  assert.doesNotMatch(response.reply, /要播放吗/);
 });
 
 test('does not attach ambience when the user explicitly declines it', async (t) => {
@@ -156,4 +170,74 @@ test('keeps a tool-generated TTS artifact private until the HTTP layer serialize
 
   assert.equal(response.ttsDataUrl, 'data:audio/mpeg;base64,AAE=');
   assert.equal(response.ttsError, undefined);
+});
+
+test('honors a model-understood ambience request without a keyword match', async (t) => {
+  const service = createService(t, { ...voicePlan, backgroundRequested: true });
+  const response = await service.handleMessage({ userId: firstUserId, message: '给房间配点安静的声音吧' });
+  assert.ok(response.audio);
+  assert.equal(response.autoplay, false);
+});
+
+test('includes playback confirmation exchanges in the next conversation prompt', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'dreamie-context-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  let prompt = '';
+  const service = createWebSessionService({
+    memoryStores: createMemoryStoreFactory({ kind: 'sqlite', databasePath: join(directory, 'dreamie.db') }),
+    getSleepPlan: async (request) => { prompt = request.prompt; return voicePlan; },
+  });
+  const first = await service.handleMessage({ userId: firstUserId, message: '请放一点雨声' });
+  await service.handleMessage({ userId: firstUserId, sessionId: first.sessionId, message: '好，就播放这个' });
+  await service.handleMessage({ userId: firstUserId, sessionId: first.sessionId, message: '我们接着聊刚才的事' });
+  assert.match(prompt, /用户：好，就播放这个/);
+  assert.match(prompt, /正在播放/);
+});
+
+test('offers ambience only after several turns and a current explicit poor state, once per session', async (t) => {
+  const service = createService(t, voicePlan);
+  const first = await service.handleMessage({ userId: firstUserId, message: '我今天很累' });
+  assert.equal(first.audio, undefined);
+  const second = await service.handleMessage({ userId: firstUserId, sessionId: first.sessionId, message: '下午开了好几个会' });
+  assert.equal(second.audio, undefined);
+  const third = await service.handleMessage({ userId: firstUserId, sessionId: first.sessionId, message: '现在非常累，状态也不好' });
+  assert.ok(third.audio);
+  assert.equal(third.audioMode, 'voice');
+  assert.equal(third.autoplay, false);
+  const fourth = await service.handleMessage({ userId: firstUserId, sessionId: first.sessionId, message: '还是很累' });
+  assert.equal(fourth.audio, undefined);
+});
+
+test('respects refusal even when a later message qualifies for emotional ambience support', async (t) => {
+  const service = createService(t, voicePlan);
+  const first = await service.handleMessage({ userId: firstUserId, message: '今天工作很多' });
+  await service.handleMessage({ userId: firstUserId, sessionId: first.sessionId, message: '不用背景音，只陪我聊聊' });
+  const third = await service.handleMessage({ userId: firstUserId, sessionId: first.sessionId, message: '现在非常累，状态很差' });
+  assert.equal(third.audio, undefined);
+});
+
+test('does not offer emotional ambience for negated fatigue after several turns', async (t) => {
+  const service = createService(t, voicePlan);
+  const first = await service.handleMessage({ userId: firstUserId, message: '今天聊得挺开心' });
+  await service.handleMessage({ userId: firstUserId, sessionId: first.sessionId, message: '事情已经做完了' });
+  const third = await service.handleMessage({ userId: firstUserId, sessionId: first.sessionId, message: '其实不太累，心情很好' });
+  assert.equal(third.audio, undefined);
+});
+
+test('plays the selected track after one semantically understood confirmation without recommending again', async (t) => {
+  const service = createService(t, { ...voicePlan, backgroundConfirmed: true });
+  const first = await service.handleMessage({ userId: firstUserId, message: '我想听一点雨声' });
+  assert.equal(first.autoplay, false);
+  const confirmed = await service.handleMessage({ userId: firstUserId, sessionId: first.sessionId, message: '嗯嗯，就这样吧' });
+  assert.equal(confirmed.autoplay, true);
+  assert.equal(confirmed.audio?.trackId, first.audio?.trackId);
+  assert.deepEqual(service.getEventTypes(first.sessionId, firstUserId), ['recommended', 'played']);
+});
+
+test('does not use semantic confirmation to bypass an explicit refusal', async (t) => {
+  const service = createService(t, { ...voicePlan, backgroundConfirmed: true });
+  const first = await service.handleMessage({ userId: firstUserId, message: '我想听一点雨声' });
+  const refused = await service.handleMessage({ userId: firstUserId, sessionId: first.sessionId, message: '先别放，等一下' });
+  assert.deepEqual(service.getEventTypes(first.sessionId, firstUserId), ['recommended']);
+  assert.notEqual(refused.audio?.state, 'playing');
 });

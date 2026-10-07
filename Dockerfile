@@ -1,6 +1,7 @@
 FROM node:24-bookworm-slim
 WORKDIR /app
 COPY index.html app.js audio-player.js styles.css package.json ./
+COPY settings.js watch-together.js ./
 COPY assets ./assets
 COPY dreamie-mvp ./dreamie-mvp
 WORKDIR /app/dreamie-mvp

@@ -62,6 +62,8 @@ export function createAudioPlaybackController({
 
   const ensureMixGraph = () => {
     if (!AudioContextCtor || !voice || !background) return false;
+    // The graph controls ambience volume; do not attenuate it a second time.
+    background.volume = 1;
     if (!context) context = new AudioContextCtor();
     if (!voiceGain) {
       voiceGain = context.createGain();

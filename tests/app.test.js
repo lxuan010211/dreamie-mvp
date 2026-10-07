@@ -1,7 +1,33 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createChatState, getAudioControlMode, getAudioFormat, getOrCreateAnonymousUserId, shouldStartVoiceHold, tryCapturePointer } from '../app.js';
+import { createChatState, getAudioControlMode, getAudioFormat, getOrCreateAnonymousUserId, shouldStartVoiceHold, tryCapturePointer, updatePlaybackBubble } from '../app.js';
+
+test('animates the playback bubble only while audio is playing and resets on stop', () => {
+  const classes = new Set();
+  const attributes = new Map();
+  const bubble = { classList: { toggle: (name, enabled) => enabled ? classes.add(name) : classes.delete(name) }, setAttribute: (name, value) => attributes.set(name, value) };
+  updatePlaybackBubble(bubble, 'playing');
+  assert.equal(classes.has('is-playing'), true);
+  assert.equal(attributes.get('aria-label'), 'Dreamie 正在播放音频');
+  for (const state of ['ready', 'idle']) {
+    updatePlaybackBubble(bubble, state);
+    assert.equal(classes.has('is-playing'), false);
+    assert.equal(attributes.get('aria-label'), 'Dreamie 音频未播放');
+  }
+});
+
+test('keeps the bubble visible after a message is sent even when playback stops', () => {
+  const classes = new Set();
+  const bubble = { classList: { toggle: (name, enabled) => enabled ? classes.add(name) : classes.delete(name) }, setAttribute: () => {} };
+  updatePlaybackBubble(bubble, 'idle', false);
+  assert.equal(classes.has('is-visible'), false);
+  updatePlaybackBubble(bubble, 'playing', true);
+  assert.equal(classes.has('is-visible'), true);
+  updatePlaybackBubble(bubble, 'idle', true);
+  assert.equal(classes.has('is-visible'), true);
+  assert.equal(classes.has('is-playing'), false);
+});
 
 test('keeps one anonymous user ID in browser storage', () => {
   const values = new Map();

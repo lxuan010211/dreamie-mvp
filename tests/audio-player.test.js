@@ -76,6 +76,26 @@ test('keeps a manual play state when autoplay is blocked', async () => {
   assert.equal(player.getState(), 'ready');
 });
 
+test('keeps mixed ambience audible by applying attenuation only once in the audio graph', async () => {
+  FakeAudio.instances = [];
+  const gains = [];
+  const node = () => ({ connect() { return this; }, disconnect() {} });
+  class FakeAudioContext {
+    state = 'running';
+    destination = {};
+    createGain() { const gain = { ...node(), gain: { value: 1 } }; gains.push(gain); return gain; }
+    createMediaElementSource() { return node(); }
+    async resume() {}
+  }
+  const player = createAudioPlaybackController({ AudioCtor: FakeAudio, AudioContextCtor: FakeAudioContext });
+  player.loadVoice('voice', { mode: 'voice_with_background' });
+  player.loadBackground('bgm', { preserveVoice: true, mode: 'voice_with_background' });
+  await player.play();
+  assert.equal(FakeAudio.instances[1].volume * gains[1].gain.value, 0.18);
+  assert.equal(FakeAudio.instances[0].playCalls, 1);
+  assert.equal(FakeAudio.instances[1].playCalls, 1);
+});
+
 test('replaces the previous voice layer when loading background-only audio', async () => {
   FakeAudio.instances = [];
   const player = createAudioPlaybackController({ AudioCtor: FakeAudio });

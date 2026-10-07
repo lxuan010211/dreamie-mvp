@@ -12,7 +12,7 @@
       <div class="app-glow" aria-hidden="true"></div>
 
       <header class="topbar">
-        <a class="brand" href="#main-content" aria-label="Dreamie 首页">
+        <a class="brand" href="#watch-together" data-open-watch aria-label="Dreamie · 打开一起看" title="一起看">
           <span class="brand-mark" aria-hidden="true">✦</span>
           <span>Dreamie</span>
         </a>
@@ -20,7 +20,7 @@
           <span class="presence-dot" aria-hidden="true"></span>
           陪你慢慢聊
         </div>
-        <button class="circle-button" type="button" aria-label="设置，功能即将推出" title="设置，功能即将推出">
+        <button class="circle-button" data-open-settings type="button" aria-label="打开设置" title="设置">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.8A3.2 3.2 0 1 0 12 15.2 3.2 3.2 0 0 0 12 8.8Zm8.2 4.45-1.69.98c.04.28.06.57.06.86s-.02.58-.06.86l1.69.98-1.7 2.94-1.7-.98a6.7 6.7 0 0 1-1.49.86v1.96H11.9V18.8a6.7 6.7 0 0 1-1.49-.86l-1.7.98-1.7-2.94 1.69-.98A6.2 6.2 0 0 1 8.64 14c0-.29.02-.58.06-.86l-1.69-.98 1.7-2.94 1.7.98c.46-.35.96-.64 1.49-.86V7.38h3.4v1.96c.53.22 1.03.51 1.49.86l1.7-.98 1.7 2.94Z" /></svg>
         </button>
       </header>
@@ -33,6 +33,10 @@
 
         <img class="sofa-image" src="./assets/mascots/dreamie-sofa-lavender-v1.png" alt="" aria-hidden="true" />
         <div class="lamb-wrap">
+          <div class="playback-bubble" data-playback-bubble role="img" aria-label="Dreamie 音频未播放">
+            <img class="playback-bubble__art" src="./assets/mascots/dreamie-listening-circle-bubble-separated-v5.png" alt="" aria-hidden="true" />
+            <span class="playback-bubble__center" aria-hidden="true"><i></i><i></i><i></i></span>
+          </div>
           <div class="listen-bubble" data-listen-bubble hidden aria-live="polite">
             <span class="listen-bubble__dot"></span>
             <span data-listen-label>我在听</span>
@@ -65,6 +69,44 @@
         </button>
       </form>
     </main>
+    <section class="watch-page" id="watch-together" data-watch-page hidden aria-label="一起看">
+      <header class="watch-topbar">
+        <div class="watch-brand">Dreamie</div>
+        <button type="button" class="watch-close" data-watch-close aria-label="返回聊天" title="返回聊天"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+      </header>
+      <div class="watch-intro">
+        <h1 data-watch-heading>粘贴你想看的链接</h1>
+        <button type="button" data-watch-edit hidden>换个链接 <span aria-hidden="true">↗</span></button>
+      </div>
+      <div class="watch-editor" data-watch-editor>
+        <form class="watch-link-card" data-watch-form>
+          <div class="watch-card-title"><h2>视频或播客链接</h2></div>
+          <div class="watch-input-wrap"><label class="sr-only" for="watch-link">视频或播客链接</label><textarea id="watch-link" data-watch-input spellcheck="false" autocapitalize="off" maxlength="4000" placeholder="https://v.douyin.com/…&#10;https://www.bilibili.com/video/…&#10;https://www.xiaoyuzhoufm.com/…"></textarea><button type="button" data-watch-clear class="watch-clear" hidden aria-label="清空链接">×</button></div>
+          <p class="watch-feedback" data-watch-feedback role="status" aria-live="polite" hidden></p>
+          <button class="watch-primary" data-watch-submit type="submit" disabled>开始一起看</button>
+        </form>
+      </div>
+      <div class="watch-room" data-watch-room hidden>
+        <div class="watch-content-info"><p data-watch-url></p></div>
+        <div class="watch-stage">
+          <span class="watch-stage-star watch-stage-star--one" aria-hidden="true">✦</span><span class="watch-stage-star watch-stage-star--two" aria-hidden="true">✧</span>
+          <div class="watch-tv"><div class="watch-screen" data-watch-player></div><div class="watch-tv-ledge"><span></span><i></i></div></div>
+          <div class="watch-companion"><span class="watch-companion-glow" aria-hidden="true"></span><img src="./assets/mascots/dreamie-lamb-watching-back-v2.png" alt="Dreamie 小羊背对用户，坐着看电视"/></div>
+          <p class="watch-room-caption">把世界的声音调轻一点。</p>
+        </div>
+      </div>
+    </section>
+    <section class="settings-page" data-settings-page hidden aria-label="伙伴设置">
+      <header class="settings-topbar"><button type="button" class="circle-button" data-close-settings aria-label="返回聊天">‹</button><span>伙伴设置</span><span class="settings-saved" data-settings-saved>自动保存</span></header>
+      <div class="settings-hero"><div class="settings-wordmark" aria-hidden="true">Dreamie</div><p>让陪伴，更像你喜欢的样子</p><img src="./assets/mascots/dreamie-lamb-on-pillow-one-leg-v13.png" alt="趴在紫色枕头上的 Dreamie 小羊" /></div>
+      <div class="settings-cards">
+<article class="settings-card"><button class="settings-row" data-edit-setting="username" type="button"><span class="settings-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20v-1.5a7 7 0 0 1 14 0V20Z"/></svg></span><span class="settings-copy"><strong>用户名</strong><small>这是 Dreamie 如何称呼你</small></span><span class="settings-value" data-setting-username>小宝</span><span class="settings-chevron" aria-hidden="true">›</span></button></article>
+        <article class="settings-card"><button class="settings-row" data-edit-setting="persona" type="button"><span class="settings-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20.2 5.8a5 5 0 0 0-7.1 0L12 6.9l-1.1-1.1a5 5 0 0 0-7.1 7.1L12 21l8.2-8.1a5 5 0 0 0 0-7.1Z"/></svg></span><span class="settings-copy"><strong>AI 伙伴人设</strong><small>Dreamie 的性格与陪伴方式</small></span><span class="settings-value" data-setting-persona>温柔治愈型</span><span class="settings-chevron" aria-hidden="true">›</span></button><p class="settings-detail" data-persona-description></p></article>
+        <article class="settings-card"><button class="settings-row" data-edit-setting="voiceId" type="button"><span class="settings-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 9v6M12 4v16M18 7v10"/></svg></span><span class="settings-copy"><strong>AI 伙伴音色</strong><small>选择你喜欢的 Dreamie 声音</small></span><span class="settings-value" data-setting-voice>温暖治愈音</span><span class="settings-chevron" aria-hidden="true">›</span></button><div class="settings-preview"><div class="settings-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><button data-voice-preview type="button">试听</button></div><p class="settings-preview-status" data-preview-status role="status"></p></article>
+      </div>
+      <p class="settings-footer">你的偏好，会在下一次对话中生效。</p>
+    </section>
+    <dialog class="settings-dialog" data-settings-dialog aria-labelledby="settings-dialog-title"><form method="dialog" data-settings-form><div class="settings-dialog-header"><h2 id="settings-dialog-title"></h2><button type="button" data-dismiss-setting aria-label="取消">×</button></div><div data-setting-options></div><p class="settings-preview-status" data-dialog-preview-status role="status"></p><button class="settings-save" value="save" type="submit">保存选择</button></form></dialog>
     <script type="module" src="./app.js"></script>
   </body>
 </html>

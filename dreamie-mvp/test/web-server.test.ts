@@ -3,6 +3,10 @@ import test from 'node:test';
 
 import { buildWebAudioResponse, getListenPort, getLocalCertificateUrl, getLocalPreviewUrls, getSpeechText, getStaticFile, createDreamieWebServer } from '../src/web-server.js';
 
+test('serves the together-watching browser module', () => {
+  assert.equal(getStaticFile('/watch-together.js'), 'watch-together.js');
+});
+
 test('serves the browser audio controller module and prefers the generated script for TTS', () => {
   assert.equal(getStaticFile('/audio-player.js'), 'audio-player.js');
   assert.equal(getSpeechText({ reply: '简短回复', audioScript: '完整睡前故事。' }), '简短回复\n完整睡前故事。');

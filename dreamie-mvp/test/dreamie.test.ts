@@ -18,6 +18,16 @@ test('accepts a complete playable sleep plan', () => {
   assert.equal(plan.autoplay, true);
 });
 
+test('accepts natural conversation without an unsolicited relaxation script', () => {
+  const plan = sleepPlanSchema.parse({
+    reply: '那个项目后来怎么样了？你说的同事今天有帮忙吗？',
+    contentType: 'breathing', durationMinutes: 10, mood: 'unknown',
+    audioScript: '', backgroundRequested: false,
+  });
+  assert.equal(plan.audioScript, '');
+  assert.equal(plan.backgroundRequested, false);
+});
+
 test('accepts a story plan with a background track', () => {
   const plan = sleepPlanSchema.parse({
     reply: '我给你讲一个很短的故事。',

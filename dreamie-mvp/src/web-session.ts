@@ -12,10 +12,10 @@ import {
   recommendBackgroundAudio,
   requestsBackgroundAudio,
   requestsNarrationWithBackground,
-  shouldSoftRecommendBackgroundAudio,
 } from './background-audio-session.js';
 import type { DreamieAgentRunResult, SleepPlan } from './dreamie.js';
 import type { DreamieToolContext, DreamieToolEffects } from './dreamie-tools.js';
+import { profileInstructions, type CompanionProfile } from './companion-profile.js';
 import type { MemoryStoreFactory } from './memory-store-factory.js';
 import { applyListeningFeedbackAsync } from './memory-policy.js';
 import type { AsyncMemoryStore } from './postgres-memory-store.js';
@@ -45,6 +45,7 @@ export interface WebChatResponse {
 }
 
 export interface WebToolContextInput {
+  voiceId?: string;
   userId: string;
   sessionId: string;
   mood: SleepPlan['mood'];
@@ -66,6 +67,7 @@ export interface WebSessionService {
     userId: string;
     sessionId?: string;
     message: string;
+    profile?: CompanionProfile;
   }): Promise<WebChatResponse>;
   getEventTypes(sessionId: string, userId: string): string[];
 }
@@ -82,6 +84,7 @@ interface WebSession {
   mood: SleepPlan['mood'];
   eventTypes: string[];
   recommendationShown: boolean;
+  userTurns: number;
 }
 
 export function createWebSessionService(dependencies: {
@@ -108,6 +111,7 @@ export function createWebSessionService(dependencies: {
       mood: 'unknown',
       eventTypes: [],
       recommendationShown: false,
+      userTurns: 0,
     };
     sessions.set(sessionKey(userId, id), session);
     return session;
@@ -134,6 +138,7 @@ export function createWebSessionService(dependencies: {
     audioPlan?: Partial<Pick<SleepPlan, 'audioScript' | 'audioMode' | 'backgroundTrackId' | 'recommendation' | 'autoplay'>>,
     effects?: DreamieToolEffects,
   ): WebChatResponse {
+    session.dialogue = addAssistantMessage(session.dialogue, reply);
     return {
       sessionId: session.id,
       reply,
@@ -160,8 +165,9 @@ export function createWebSessionService(dependencies: {
     return { plan: result, effects: {} };
   }
 
-  function createToolContext(session: WebSession): DreamieToolContext | undefined {
+  function createToolContext(session: WebSession, profile?: CompanionProfile): DreamieToolContext | undefined {
     return dependencies.createToolContext?.({
+      voiceId: profile?.voiceId,
       userId: session.userId,
       sessionId: session.id,
       mood: session.mood,
@@ -180,6 +186,11 @@ export function createWebSessionService(dependencies: {
       if (!input.message.trim()) throw new Error('请输入想对 Dreamie 说的话。');
 
       const session = await getSession(input.userId, input.sessionId);
+      session.userTurns += 1;
+      session.dialogue = addUserMessage(session.dialogue, input.message);
+      if (/(不要|不想|不用|别).*(背景音|音乐|bgm|雨声)|只想聊天|只陪.*聊/i.test(input.message)) {
+        session.dialogue = markRecommendationDeclined(session.dialogue);
+      }
       const action = getBackgroundAudioAction(input.message);
 
       if (session.track && action === 'play') {
@@ -196,9 +207,7 @@ export function createWebSessionService(dependencies: {
         if (action === 'dislike') {
           await record(session, session.track, 'disliked');
           session.track = undefined;
-          session.dialogue = markRecommendationDeclined(
-            addAssistantMessage(session.dialogue, '好的，我记住了，今晚不再推荐背景音。'),
-          );
+          session.dialogue = markRecommendationDeclined(session.dialogue);
           return responseFor(session, '好的，我记住了，今晚不再推荐背景音。', 'pending');
         }
         await record(session, session.track, action === 'change' ? 'changed' : 'disliked');
@@ -221,24 +230,32 @@ export function createWebSessionService(dependencies: {
         );
       }
 
-      session.dialogue = addUserMessage(session.dialogue, input.message);
+      const canSuggest = session.userTurns >= 3
+        && !session.recommendationShown
+        && !session.dialogue.recommendationCooldown
+        && /(非常累|很累|好累|太累|特别累|累坏|累死|疲惫|状态.{0,3}(不好|很差|糟)|心情.{0,3}(不好|很差|低落)|难受|撑不住|压力.{0,3}(大|重)|很焦虑|睡不着|停不下来)/.test(input.message)
+        && !/(不累|不太累|状态很好|心情很好)/.test(input.message);
       const run = await dependencies.getSleepPlan({
-        prompt: `${getConversationPrompt(session.dialogue)}\n${session.memory.modelSummary}`,
-        context: createToolContext(session),
+        prompt: `${profileInstructions(input.profile)}\n${getConversationPrompt(session.dialogue)}\n${session.memory.modelSummary}\n当前已选背景音：${session.track?.title ?? '无'}。请只判断最新用户消息的需求；之前的音频请求不代表现在还要推荐。\n${canSuggest ? '允许情绪关怀推荐：请结合当前用户的疲惫或低落，自然推荐一个可拒绝的背景音，等待确认。' : '本轮不允许主动推荐背景音；仅响应用户明确的播放需求。'}`,
+        context: createToolContext(session, input.profile),
       });
       const { plan, effects } = getPlanAndEffects(run);
-      session.dialogue = addAssistantMessage(session.dialogue, plan.reply);
+      if (session.track && plan.backgroundConfirmed === true && !requestsNarrationWithBackground(input.message)
+        && !/(不要|不用|不想|先别|别放|不放|换一个|换一种|等一下|等会)/.test(input.message)) {
+        await record(session, session.track, 'played');
+        return responseFor(session, `好，给你放「${session.track.title}」。`, 'playing', {
+          audioMode: 'background', backgroundTrackId: session.track.id, autoplay: true,
+        });
+      }
       session.mood = plan.mood;
       const explicitBackground = requestsBackgroundAudio(input.message);
-      // The model may suggest an audio mode, but only an explicit user request
-      // or the bounded soft-recommendation policy may attach a background layer.
-      const shouldAttachAudio = explicitBackground;
-      const shouldSuggest = !shouldAttachAudio && !session.dialogue.recommendationCooldown && shouldSoftRecommendBackgroundAudio(
-        plan.mood,
-        session.memory.preferredKinds,
-        session.recommendationShown,
-        input.message,
-      );
+      // Interpret implicit wording through the model's explicit intent field;
+      // mood and stable preferences alone never trigger a recommendation.
+      const shouldAttachAudio = explicitBackground || plan.backgroundRequested === true;
+      const mixedPlayback = shouldAttachAudio
+        && (requestsNarrationWithBackground(input.message) || plan.audioMode === 'voice_with_background');
+      const shouldSuggest = !shouldAttachAudio && canSuggest
+        && ['tired', 'stressed', 'sad', 'restless', 'overthinking'].includes(plan.mood);
       if (shouldAttachAudio || shouldSuggest) {
         session.track = (effects.recommendedTrack ? findSleepAudioById(effects.recommendedTrack.id) : undefined)
           ?? (plan.backgroundTrackId ? findSleepAudioById(plan.backgroundTrackId) : undefined)
@@ -248,22 +265,24 @@ export function createWebSessionService(dependencies: {
             session.memory.preferredKinds,
           );
         await record(session, session.track, 'recommended');
+        if (mixedPlayback) await record(session, session.track, 'played');
         session.recommendationShown = true;
       } else {
         session.track = undefined;
       }
-      const responsePlan = shouldSuggest
-        ? { ...plan, audioMode: 'voice' as const, backgroundTrackId: session.track?.id, recommendation: plan.recommendation ?? getBackgroundRecommendationText(session.track!), autoplay: false }
-        : shouldAttachAudio
-          ? { ...plan, audioMode: requestsNarrationWithBackground(input.message) ? 'voice_with_background' as const : 'background' as const, backgroundTrackId: session.track?.id, autoplay: false }
-          : { ...plan, audioMode: 'voice' as const, backgroundTrackId: undefined, recommendation: undefined };
-      const responseText = shouldSuggest || shouldAttachAudio
+      const responsePlan = shouldAttachAudio
+          ? { ...plan, audioMode: mixedPlayback ? 'voice_with_background' as const : 'background' as const, backgroundTrackId: session.track?.id, autoplay: mixedPlayback }
+          : shouldSuggest
+            ? { ...plan, audioMode: 'voice' as const, backgroundTrackId: session.track?.id, autoplay: false }
+          : { ...plan, audioMode: 'voice' as const, backgroundTrackId: undefined, recommendation: undefined, autoplay: true };
+      const hasNaturalSuggestion = shouldSuggest && /(雨声|海浪|背景音|轻音乐|bgm|音乐|壁炉)/i.test(plan.reply);
+      const responseText = !mixedPlayback && (shouldAttachAudio || shouldSuggest) && !hasNaturalSuggestion && !plan.reply.includes(session.track!.title)
         ? `${plan.reply}\n${getBackgroundRecommendationText(session.track!)}`
         : plan.reply;
       return responseFor(
         session,
         responseText,
-        'pending',
+        mixedPlayback ? 'playing' : 'pending',
         responsePlan,
         effects,
       );
